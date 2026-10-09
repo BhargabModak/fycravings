@@ -113,6 +113,8 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
 .apps a:hover{border-color:var(--amber)}
 .payee{margin:14px 0 0;color:var(--muted);font-size:.9rem}
 .payee b{color:var(--ink)}
+.steps{margin:14px 0;padding-left:20px;color:var(--muted);font-size:.92rem;line-height:1.6}
+.steps b{color:var(--ink)}
 .linkbtn{background:none;border:0;color:var(--amber);font:inherit;font-weight:600;text-decoration:underline;cursor:pointer;padding:0}
 .status{min-height:1.4em;margin:12px 0 0;color:var(--leaf);font-size:.92rem}
 
@@ -256,10 +258,6 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
         <label class="field"><span>Room no. / hostel</span><input id="oRoom" maxlength="40" placeholder="e.g. Room 214"></label>
         <label class="field"><span>Phone number</span><input id="oPhone" type="tel" inputmode="numeric" maxlength="10" autocomplete="tel"></label>
         <button type="button" class="btn primary full" id="placeBtn">Place order</button>
-        <div id="paidBox" hidden>
-          <label class="field" style="margin-top:14px"><span>UPI transaction ID (optional)</span><input id="oUtr" maxlength="30"></label>
-          <button type="button" class="btn full" id="paidBtn" disabled>I've paid</button>
-        </div>
         <p class="status" id="orderStatus" role="status" aria-live="polite"></p>
       </div>
     </div>
@@ -269,7 +267,7 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
 <section id="pay">
   <div class="wrap">
     <h2>Pay with UPI</h2>
-    <p class="lead">Enter your order amount and tap pay. Your phone's UPI app opens to pay the UPI ID below.</p>
+    <p class="lead">Copy the UPI ID, pay in your UPI app, then come back and tap I've paid.</p>
     <div class="pay-grid">
       <div class="card">
         <label class="field"><span>Amount (₹)</span>
@@ -283,14 +281,16 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
         </div>
         <label class="field"><span>Your name &amp; room no.</span>
           <input id="who" type="text" maxlength="40" placeholder="e.g. Riya – Room 214" autocomplete="name"></label>
-        <button type="button" class="btn primary full" id="payBtn">Pay with UPI ID</button>
-        <div class="apps" role="group" aria-label="Pay with a specific app">
-          <a id="gpay" href="#">GPay</a>
-          <a id="phonepe" href="#">PhonePe</a>
-          <a id="paytm" href="#">Paytm</a>
-        </div>
-        <p class="payee">Paying <b id="payAmt"></b> to <b id="payeeName"></b><br>
-          UPI ID: <b id="payeeId"></b> · <button type="button" class="linkbtn" id="copyUpi">Copy</button></p>
+        <button type="button" class="btn primary full" id="copyUpiBtn">Copy UPI ID</button>
+        <p class="payee">Pay <b id="payAmt"></b> to <b id="payeeName"></b><br>UPI ID: <b id="payeeId"></b></p>
+        <ol class="steps">
+          <li>Tap <b>Copy UPI ID</b> above.</li>
+          <li>Open your UPI app (GPay, PhonePe, Paytm or any other) and choose <b>Pay to UPI ID</b>.</li>
+          <li>Paste the UPI ID, enter the amount and pay.</li>
+          <li>Come back to this page and tap <b>I've paid</b> below to confirm.</li>
+        </ol>
+        <label class="field"><span>UPI transaction ID (optional)</span><input id="oUtr" maxlength="30" autocomplete="off"></label>
+        <button type="button" class="btn full" id="paidBtn">I've paid</button>
         <p class="status" id="payStatus" role="status" aria-live="polite"></p>
         <p class="note">After paying, keep the payment screenshot ready and call <a href="tel:+919239048437">9239048437</a> if there is any issue.</p>
       </div>
@@ -361,17 +361,6 @@ function copyIdSync(){
     const ok=document.execCommand('copy');t.remove();return ok;
   }catch(_){ return false; }
 }
-function payWithId(scheme){
-  const a = parseFloat($('amt').value);
-  if (!(a >= 1)) { say('Enter your order amount first.'); return; }
-  copyIdSync();
-  if (!isMobile){ say('Open this page on your phone to pay. UPI ID: ' + UPI.pa); return; }
-  say('Opening your UPI app to pay ₹' + a + '…');
-  window.location.href = scheme + '?' + upiQuery();   // runs straight from the tap so the phone allows it
-  setTimeout(() => {
-    if (document.visibilityState === 'visible') say('App did not open? UPI ID ' + UPI.pa + ' is copied. Open your UPI app, choose Pay to UPI ID, paste it and pay ₹' + a + '.');
-  }, 2500);
-}
 
 $('payeeName').textContent = UPI.pn.replace(/\s+/g,' ');
 $('payeeId').textContent = UPI.pa;
@@ -379,12 +368,9 @@ $('amt').addEventListener('input', refresh);
 $('who').addEventListener('input', refresh);
 document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => { $('amt').value = c.dataset.amt; refresh(); }));
 
-$('payBtn').addEventListener('click', () => { if (orderId) payWithId('upi://pay'); });
-[['gpay',isIOS?'gpay://upi/pay':'tez://upi/pay'],['phonepe','phonepe://pay'],['paytm','paytmmp://pay']].forEach(([id,u]) => $(id).addEventListener('click', e => { e.preventDefault(); if (orderId) payWithId(u); }));
-
-$('copyUpi').addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText(UPI.pa); say('UPI ID copied.'); }
-  catch (_) { say('Copy failed. UPI ID: ' + UPI.pa); }
+$('copyUpiBtn').addEventListener('click', () => {
+  const ok = copyIdSync();
+  say(ok ? 'UPI ID copied: ' + UPI.pa + '. Now open your UPI app and pay to it.' : 'Copy failed. Type this UPI ID in your UPI app: ' + UPI.pa);
 });
 // ===== Orders =====
 const KEYS={"pub": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxTNQl24wzisDODqPf9ASn8gr9uSj5u4mUtmw6snHL2MAMhGj7MeMY14UwbwJMBuCUYqffCaXSFs+0+4AT8XZqL264YH7o9hjJ+/HTp4Pn56NpDOr+Jk2EWJgogAtsClexaFG3FwGgr65W2a53soqNmSV/+nCJrgeqLIq2LHDjd1MowuAiib+xsAmWdtZorCl1aUnoqU2ViKyeH+W8v7xviorx+gYFQEVnjTIZRpK0xsAdnO5f2o17xsGN8PXNQFCU5P0t4UoTuPdoDmO9yBT7gSysjTGOZwr9skoH4OF3LAz1Y1XgKoeAgeA37z+LvEwtNwQcRsLyKbnrbzITlx5NQIDAQAB", "salt": "JFbNL4VzmMW3gq9vcqDwng==", "iv": "73A37ZF3GHtYiXeM", "ct": "axxR6rC32eyhkfjZasC7QTvIslJOu6YVNSB5GR/XtoF81UxwYPCANGSLKHTu6pYCmOD+TV0yfQgGkkBPzuPHKk7TLnjKy5ImQiVOn5Y87OYKlgizK2WrBGy99rc4r6s5Lv1ZQ0iUniUSMSrlbU/xk9vueoTjN67Roosu0xsHkFWdCXPNaRiHLMbe4FRZuDbKDjvM7LoDfjsE2ssRC1SYaGryylSGgeq4WERSNTEx9aCTDBGEdon9yj9H8znmWZWZqO0sTaL3OGDqADNYjEhkPSznTZz+ho8mOSRCHOTYNRKFPQa9xk2EReJJNgu35ZzON0+n3Qt2Y2CnK7CjnQcLcHYsqrDxzfeyBs8h9K9tGTSodvwrh7aEdEfE3vop15FSab9HSdypMI8yeGEAFrXGG8BJixQIrixxIn1GZ8Iyv9dkRo3jayyeQdbUVdKp0bZb00qmPGnO6RnjGhX8J3wlZ830EotKMp+cftTDApRrpcViENI2McnfC1tIXJgoa01Z+lodLdHl1zDhGFgXBnCZB5jbfjiymu+LcReubx7tBYV8MJBXUuY+KVLhMumU5mAxZvpJljtN9oF5bWs9if7TdE+RemguMl7XdhpfCIeVTTsAJSW4rjv12MZ/OHUU6tAxo9FPUi7r6bFDkJt5A1CaI1O4LN/d+15xizsgzU+VcRTceOLXQ/n/SwCxppuZY2EkwJ3bnzqlapYK47ZVuBkd0fvBvymBPaOXJ+mO+twldKdDViFUjmN9EIEjsE0qKDjOPdJG6uLtHJVeADj3ri/vo1iByu2fmrjehbpQa8biITamJKZi8bB7etqHfm1kVVcKJz7StWks9ndp2hZQA93Bz/t+I2zBP8yMp9vMtn+iAIGms73EkOIS7VZJbDRVlKcON/5ydtC/e1rG9YggwNvnFysw8It+i9VpYGIZxRRKiSbq/9CugMsXRb0E4JfSLpvJlkl+Qj+rIIUpvlFQ5fROZ/THTft5OQwGw75VXYkVhRF81wEDjbV53Le1lH6XJvQcUQ8nIkX+UYCV537dK7qa6jbo+Qu/WnsnruFgZsB4uYEGrBfUcOeM4+qL1H115rF7+4IGSiLOJHxBg6ZSdUP+381MAoFpzVXck/JXFEnSD3fHX6z3G9COuju6pITjY0GU7CJsvt0lRWktA7tfS/v2MFp3LE1ugn7LVXeOz5YN9azXxf3oNYqPhLnN038w+Gfmb8ELo2acF08zSiSS8iZ05viIUnYsBzsECKYu4hSbUZPNGs+3ssy1hWtEXJ0lJ49SibMs/a/j9DKNVYizLsJoZJHQfCL7LIji38i/Leh41w2eFWELWZh86jHQ8e3tkS+GBsMI8sB+0ImGGW7akPjH8pazciKpL77cDkJO/N198XWfwRAXSpQcBx4u/0k16sNoS9+ukWa51wzuXhh9EpU9X6H+ARsOMJEFvMvjnM85ypIYUaCVjrZlN9hIBHA4ukAt2RZaVY917dKjZWn6aCKHO1YN7GtYQLRX+65neoxlSkzTwG+hhtGTs9Ie+YUtlJ0jXn+YcAe83oQxnLWgdCy8virv5RNFNHatZYwmWBK/1zoixxozLDB1M2c0l0UmrusbNYYVWvoHaFPwtsub26LzVbyP0ki8MvF6L1m8gE1JKw5IJ1I="};
@@ -432,25 +418,19 @@ $('placeBtn').addEventListener('click',async()=>{
   orderId='o'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const L=lines();
   const ok=await save(async()=>db.collection('orders').doc(orderId).set({ts:Date.now(),enc:await enc({name,room,phone,items:L,itemsText:L.map(x=>x.n+' x'+x.q).join(', '),total:t})}));
-  payTapped=false;$('paidBtn').disabled=true;$('paidBtn').textContent="I've paid";delete $('paidBtn').dataset.done;$('oUtr').disabled=false;$('oUtr').value='';
-  $('amt').value=t;$('who').value=name+' – '+room;refresh();$('paidBox').hidden=false;
-  osay(ok?'Order saved. Now pay ₹'+t+' below. "I\'ve paid" unlocks after you pay.':'Could not save online. Pay below and call 9239048437 with your order.');
+  $('paidBtn').disabled=false;$('paidBtn').textContent="I've paid";delete $('paidBtn').dataset.done;$('oUtr').disabled=false;$('oUtr').value='';
+  $('amt').value=t;$('who').value=name+' – '+room;refresh();
+  osay(ok?'Order saved. Now pay ₹'+t+' below, then tap "I\'ve paid".':'Could not save online. Pay below and call 9239048437 with your order.');
   $('pay').scrollIntoView();
 });
-['payBtn','gpay','phonepe','paytm'].forEach(id=>$(id).addEventListener('click',()=>{
-  if(!orderId)return say('Place your order first, then pay.');
-  payTapped=true;
-  setTimeout(()=>{$('paidBtn').disabled=false;},30000);
-}));
-document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='visible'&&payTapped&&orderId){$('paidBtn').disabled=false;osay('Welcome back! If your payment went through, tap "I\'ve paid".');}
-});
 $('paidBtn').addEventListener('click',async()=>{
-  if(!orderId||$('paidBtn').dataset.done)return;
-  const btn=$('paidBtn');btn.disabled=true;btn.textContent='Saving…';
+  const btn=$('paidBtn');
+  if(btn.dataset.done)return;
+  if(!orderId)return say('Place your order first, then pay.');
+  btn.disabled=true;btn.textContent='Saving…';
   const ok=await save(async()=>db.collection('orders').doc(orderId).update({paid:await enc({utr:$('oUtr').value.trim(),paidAt:Date.now()})}));
-  if(ok){btn.dataset.done='1';btn.textContent='Paid ✓';$('oUtr').disabled=true;osay('Thanks! Your payment is recorded as Paid.');}
-  else{btn.disabled=false;btn.textContent="I've paid";osay('Could not save. Please call 9239048437.');}
+  if(ok){btn.dataset.done='1';btn.textContent='Paid ✓';$('oUtr').disabled=true;say('Thanks! Your payment is recorded as Paid.');}
+  else{btn.disabled=false;btn.textContent="I've paid";say('Could not save. Please call 9239048437.');}
 });
 
 // ===== Password-protected order list =====
