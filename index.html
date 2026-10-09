@@ -287,10 +287,15 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
           <li>Tap <b>Copy UPI ID</b> above.</li>
           <li>Open your UPI app (GPay, PhonePe, Paytm or any other) and choose <b>Pay to UPI ID</b>.</li>
           <li>Paste the UPI ID, enter the amount and pay.</li>
-          <li>Come back to this page and tap <b>I've paid</b> below to confirm.</li>
+          <li>Come back here and upload a screenshot of the successful payment. Once it is checked, the <b>I've paid</b> button appears.</li>
         </ol>
-        <label class="field"><span>UPI transaction ID (optional)</span><input id="oUtr" maxlength="30" autocomplete="off"></label>
-        <button type="button" class="btn full" id="paidBtn">I've paid</button>
+        <label class="field"><span>Payment screenshot (required)</span><input id="shot" type="file" accept="image/*"></label>
+        <img id="shotPrev" alt="Payment screenshot preview" hidden style="max-width:100%;max-height:240px;border-radius:12px;margin-top:8px">
+        <p class="status" id="shotStatus" role="status" aria-live="polite"></p>
+        <div id="paidBox" hidden>
+          <label class="field"><span>UPI transaction ID (optional)</span><input id="oUtr" maxlength="30" autocomplete="off"></label>
+          <button type="button" class="btn primary full" id="paidBtn">I've paid</button>
+        </div>
         <p class="status" id="payStatus" role="status" aria-live="polite"></p>
         <p class="note">After paying, keep the payment screenshot ready and call <a href="tel:+919239048437">9239048437</a> if there is any issue.</p>
       </div>
@@ -311,13 +316,13 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
         <p class="note" id="adminSum"></p>
         <div class="cta" style="justify-content:flex-start;margin-top:12px;align-items:center;gap:10px">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="selAll" style="width:20px;height:20px"> Select all</label>
-          <button type="button" class="btn small" id="cancelSel">Cancel selected</button>
-          <button type="button" class="btn small" id="restoreSel">Restore selected</button>
+          <button type="button" class="btn small" id="cancelSel">Cancel selected orders</button>
           <span class="note" id="selCount" style="margin:0"></span>
         </div>
         <div id="orderList" style="margin-top:14px;display:grid;gap:10px"></div>
         <div class="cta" style="justify-content:flex-start;margin-top:12px">
-          <button type="button" class="btn primary small" id="exportBtn">Download for Excel (.csv)</button>
+          <button type="button" class="btn primary small" id="exportBtn">Download Excel (.xlsx, with screenshots)</button>
+          <button type="button" class="btn small" id="csvBtn">CSV (no screenshots)</button>
           <button type="button" class="btn small" id="resetBtn">Reset orders</button>
           <button type="button" class="btn small" id="lockBtn">Lock</button>
         </div>
@@ -381,7 +386,7 @@ $('copyUpiBtn').addEventListener('click', () => {
 // ===== Orders =====
 const KEYS={"pub": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxTNQl24wzisDODqPf9ASn8gr9uSj5u4mUtmw6snHL2MAMhGj7MeMY14UwbwJMBuCUYqffCaXSFs+0+4AT8XZqL264YH7o9hjJ+/HTp4Pn56NpDOr+Jk2EWJgogAtsClexaFG3FwGgr65W2a53soqNmSV/+nCJrgeqLIq2LHDjd1MowuAiib+xsAmWdtZorCl1aUnoqU2ViKyeH+W8v7xviorx+gYFQEVnjTIZRpK0xsAdnO5f2o17xsGN8PXNQFCU5P0t4UoTuPdoDmO9yBT7gSysjTGOZwr9skoH4OF3LAz1Y1XgKoeAgeA37z+LvEwtNwQcRsLyKbnrbzITlx5NQIDAQAB", "salt": "JFbNL4VzmMW3gq9vcqDwng==", "iv": "73A37ZF3GHtYiXeM", "ct": "axxR6rC32eyhkfjZasC7QTvIslJOu6YVNSB5GR/XtoF81UxwYPCANGSLKHTu6pYCmOD+TV0yfQgGkkBPzuPHKk7TLnjKy5ImQiVOn5Y87OYKlgizK2WrBGy99rc4r6s5Lv1ZQ0iUniUSMSrlbU/xk9vueoTjN67Roosu0xsHkFWdCXPNaRiHLMbe4FRZuDbKDjvM7LoDfjsE2ssRC1SYaGryylSGgeq4WERSNTEx9aCTDBGEdon9yj9H8znmWZWZqO0sTaL3OGDqADNYjEhkPSznTZz+ho8mOSRCHOTYNRKFPQa9xk2EReJJNgu35ZzON0+n3Qt2Y2CnK7CjnQcLcHYsqrDxzfeyBs8h9K9tGTSodvwrh7aEdEfE3vop15FSab9HSdypMI8yeGEAFrXGG8BJixQIrixxIn1GZ8Iyv9dkRo3jayyeQdbUVdKp0bZb00qmPGnO6RnjGhX8J3wlZ830EotKMp+cftTDApRrpcViENI2McnfC1tIXJgoa01Z+lodLdHl1zDhGFgXBnCZB5jbfjiymu+LcReubx7tBYV8MJBXUuY+KVLhMumU5mAxZvpJljtN9oF5bWs9if7TdE+RemguMl7XdhpfCIeVTTsAJSW4rjv12MZ/OHUU6tAxo9FPUi7r6bFDkJt5A1CaI1O4LN/d+15xizsgzU+VcRTceOLXQ/n/SwCxppuZY2EkwJ3bnzqlapYK47ZVuBkd0fvBvymBPaOXJ+mO+twldKdDViFUjmN9EIEjsE0qKDjOPdJG6uLtHJVeADj3ri/vo1iByu2fmrjehbpQa8biITamJKZi8bB7etqHfm1kVVcKJz7StWks9ndp2hZQA93Bz/t+I2zBP8yMp9vMtn+iAIGms73EkOIS7VZJbDRVlKcON/5ydtC/e1rG9YggwNvnFysw8It+i9VpYGIZxRRKiSbq/9CugMsXRb0E4JfSLpvJlkl+Qj+rIIUpvlFQ5fROZ/THTft5OQwGw75VXYkVhRF81wEDjbV53Le1lH6XJvQcUQ8nIkX+UYCV537dK7qa6jbo+Qu/WnsnruFgZsB4uYEGrBfUcOeM4+qL1H115rF7+4IGSiLOJHxBg6ZSdUP+381MAoFpzVXck/JXFEnSD3fHX6z3G9COuju6pITjY0GU7CJsvt0lRWktA7tfS/v2MFp3LE1ugn7LVXeOz5YN9azXxf3oNYqPhLnN038w+Gfmb8ELo2acF08zSiSS8iZ05viIUnYsBzsECKYu4hSbUZPNGs+3ssy1hWtEXJ0lJ49SibMs/a/j9DKNVYizLsJoZJHQfCL7LIji38i/Leh41w2eFWELWZh86jHQ8e3tkS+GBsMI8sB+0ImGGW7akPjH8pazciKpL77cDkJO/N198XWfwRAXSpQcBx4u/0k16sNoS9+ukWa51wzuXhh9EpU9X6H+ARsOMJEFvMvjnM85ypIYUaCVjrZlN9hIBHA4ukAt2RZaVY917dKjZWn6aCKHO1YN7GtYQLRX+65neoxlSkzTwG+hhtGTs9Ie+YUtlJ0jXn+YcAe83oQxnLWgdCy8virv5RNFNHatZYwmWBK/1zoixxozLDB1M2c0l0UmrusbNYYVWvoHaFPwtsub26LzVbyP0ki8MvF6L1m8gE1JKw5IJ1I="};
 const b64d=x=>Uint8Array.from(atob(x),c=>c.charCodeAt(0));
-const b64e=u=>btoa(String.fromCharCode(...new Uint8Array(u)));
+const b64e=u=>{const a=new Uint8Array(u);let r='';for(let i=0;i<a.length;i+=0x8000)r+=String.fromCharCode.apply(null,a.subarray(i,i+0x8000));return btoa(r);};
 async function enc(obj){
   const pub=await crypto.subtle.importKey('spki',b64d(KEYS.pub),{name:'RSA-OAEP',hash:'SHA-256'},false,['encrypt']);
   const k=await crypto.subtle.generateKey({name:'AES-GCM',length:256},true,['encrypt']);
@@ -402,7 +407,7 @@ async function dec(priv,e){
   return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:b64d(e.iv)},k,b64d(e.ct))));
 }
 const MENU=[{n:"Red Sauce Pasta + Masala Soda",p:100},{n:"Red Sauce Pasta",p:80},{n:"Masala Fried Maggi",p:45},{n:"Masala Fried Maggi + Masala Soda",p:65},{n:"Masala Soda",p:20}];
-let db=null,orderId=null,payTapped=false,priv=null,rows=[],ids=[];const qtys=[];
+let db=null,orderId=null,orderAmt=0,payTapped=false,priv=null,rows=[],ids=[];const qtys=[];
 MENU.forEach(m=>{
   const r=document.createElement('div');r.className='menurow';
   const l=document.createElement('span');l.textContent=m.n+' – ₹'+m.p;
@@ -424,73 +429,200 @@ $('placeBtn').addEventListener('click',async()=>{
   orderId='o'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const L=lines();
   const ok=await save(async()=>db.collection('orders').doc(orderId).set({ts:Date.now(),enc:await enc({name,room,phone,items:L,itemsText:L.map(x=>x.n+' x'+x.q).join(', '),total:t})}));
-  $('paidBtn').disabled=false;$('paidBtn').textContent="I've paid";delete $('paidBtn').dataset.done;$('oUtr').disabled=false;$('oUtr').value='';
+  orderAmt=t;resetShot();$('shot').value='';
   $('amt').value=t;$('who').value=name+' – '+room;refresh();
-  osay(ok?'Order saved. Now pay ₹'+t+' below, then tap "I\'ve paid".':'Could not save online. Pay below and call 9239048437 with your order.');
+  osay(ok?'Order saved. Now pay ₹'+t+' below, upload the payment screenshot, then tap "I\'ve paid".':'Could not save online. Pay below and call 9239048437 with your order.');
   $('pay').scrollIntoView();
+});
+// ===== Payment screenshot check (runs in the buyer's browser) =====
+let shotData=null,shotInfo=null,shotToken=0,tessLoading=null;
+const shotSay=t=>{$('shotStatus').textContent=t;};
+function loadScript(src){return new Promise((res,rej)=>{const el=document.createElement('script');el.src=src;el.onload=res;el.onerror=()=>rej(new Error('Could not load '+src));document.head.appendChild(el);});}
+function loadTesseract(){
+  if(window.Tesseract)return Promise.resolve();
+  return tessLoading||(tessLoading=loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js').catch(e=>{tessLoading=null;throw e;}));
+}
+function resetShot(){
+  shotToken++;shotData=null;shotInfo=null;
+  $('shotPrev').hidden=true;$('shotPrev').removeAttribute('src');shotSay('');
+  $('paidBox').hidden=true;$('oUtr').value='';$('oUtr').disabled=false;
+  const b=$('paidBtn');b.disabled=false;b.textContent="I've paid";delete b.dataset.done;
+}
+function fitCanvas(img,max){
+  const k=Math.min(1,max/Math.max(img.width,img.height));
+  const c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.width*k));c.height=Math.max(1,Math.round(img.height*k));
+  c.getContext('2d').drawImage(img,0,0,c.width,c.height);return c;
+}
+function prepareShot(file){
+  return new Promise((res,rej)=>{
+    const url=URL.createObjectURL(file),img=new Image();
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      const ocr=fitCanvas(img,1600);
+      let max=1000,q=0.6,out=fitCanvas(img,max).toDataURL('image/jpeg',q);
+      while(out.length>220000&&q>0.35){q-=0.1;out=fitCanvas(img,max).toDataURL('image/jpeg',q);}
+      if(out.length>220000){max=700;out=fitCanvas(img,max).toDataURL('image/jpeg',0.45);}
+      res({ocr,store:out,ar:img.height/img.width});
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);rej(new Error('That file is not a readable image.'));};
+    img.src=url;
+  });
+}
+// Looks for the order amount, a success message and the payee in the text read from the screenshot.
+function verifyShot(text,amt){
+  const t=String(text||'').replace(/,/g,'');
+  const nums=[...t.matchAll(/\d+(?:\.\d{1,2})?/g)].map(m=>m[0]);
+  const A=Number(amt);
+  const sym=new RegExp('(?:₹|Rs\\.?|INR|[?%¥€])\\s*(\\d+(?:\\.\\d{1,2})?)','gi');
+  const afterSym=[...t.matchAll(sym)].map(m=>parseFloat(m[1]));
+  const exact=nums.some(n=>parseFloat(n)===A)&&(afterSym.includes(A)||nums.some(n=>n.includes('.')&&parseFloat(n)===A)||nums.some(n=>n===String(A)));
+  const recipientOk=/9729993078|pthdfc|rajwant|rajwan|kaur/i.test(t);
+  // the rupee sign is sometimes read as a digit "2", so "₹65" can come out as "265": only trusted when the payee also matches
+  const weak=nums.some(n=>n===('2'+A));
+  const amountOk=exact||(weak&&recipientOk);
+  const failed=/fail|declin|unsuccess|not\s+success|pending|reject|cancel|expired|error/i.test(t);
+  const successOk=!failed&&/success|paid|completed|complete|sent|transferred|debited|done/i.test(t);
+  const utrM=t.match(/\b(\d{12})\b/);
+  return {ok:amountOk&&successOk,amountOk,successOk,recipientOk,utr:utrM?utrM[1]:''};
+}
+$('shot').addEventListener('change',async e=>{
+  const f=e.target.files&&e.target.files[0];
+  resetShot();
+  if(!f)return;
+  if(!orderId||!orderAmt){e.target.value='';return shotSay('Place your order first, then pay and upload the screenshot.');}
+  if(!/^image\//.test(f.type)){e.target.value='';return shotSay('Please choose an image (screenshot) file.');}
+  if(f.size>20e6){e.target.value='';return shotSay('That image is too large. Choose a normal screenshot.');}
+  const my=++shotToken,amt=orderAmt;
+  try{
+    shotSay('Preparing screenshot…');
+    const p=await prepareShot(f);
+    if(my!==shotToken)return;
+    $('shotPrev').src=p.store;$('shotPrev').hidden=false;
+    shotSay('Loading the checker (a few seconds the first time)…');
+    await loadTesseract();
+    if(my!==shotToken)return;
+    shotSay('Reading screenshot… 0%');
+    const r=await Tesseract.recognize(p.ocr,'eng',{logger:m=>{if(my===shotToken&&m.status==='recognizing text')shotSay('Reading screenshot… '+Math.round(m.progress*100)+'%');}});
+    if(my!==shotToken)return;
+    const v=verifyShot(r.data.text,amt);
+    if(v.ok){
+      shotData=p.store;shotInfo={amountOk:v.amountOk,successOk:v.successOk,recipientOk:v.recipientOk,ar:p.ar,amt};
+      if(v.utr&&!$('oUtr').value)$('oUtr').value=v.utr;
+      $('paidBox').hidden=false;
+      shotSay('✓ Payment of ₹'+amt+' found in your screenshot. Tap "I\'ve paid" to confirm.');
+    }else{
+      shotSay('✗ We could not find a successful payment of ₹'+amt+' in this screenshot. Upload a clear screenshot of the payment-success screen showing the amount, or call 9239048437.');
+    }
+  }catch(err){
+    if(my===shotToken)shotSay('Could not check the screenshot ('+(err&&err.message?err.message:'error')+'). Check your internet and try again, or call 9239048437.');
+  }
 });
 $('paidBtn').addEventListener('click',async()=>{
   const btn=$('paidBtn');
   if(btn.dataset.done)return;
   if(!orderId)return say('Place your order first, then pay.');
+  if(!shotData)return shotSay('Upload your payment screenshot first.');
   btn.disabled=true;btn.textContent='Saving…';
-  const ok=await save(async()=>db.collection('orders').doc(orderId).update({paid:await enc({utr:$('oUtr').value.trim(),paidAt:Date.now()})}));
-  if(ok){btn.dataset.done='1';btn.textContent='Paid ✓';$('oUtr').disabled=true;say('Thanks! Your payment is recorded as Paid.');}
+  const ok=await save(async()=>db.collection('orders').doc(orderId).update({paid:await enc({utr:$('oUtr').value.trim(),paidAt:Date.now(),shot:shotData,ai:shotInfo})}));
+  if(ok){btn.dataset.done='1';btn.textContent='Paid ✓';$('oUtr').disabled=true;$('shot').disabled=false;say('Thanks! Your payment is recorded as Paid.');}
   else{btn.disabled=false;btn.textContent="I've paid";say('Could not save. Please call 9239048437.');}
 });
 
 // ===== Password-protected order list =====
 function csv(){
-  const h=['Time','Name','Room','Phone','Items','Amount','Status','Paid at','UPI txn ID'];
+  const h=['Time','Name','Room','Phone','Items','Amount','Status','Paid at','UPI txn ID','Screenshot check'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-  return '\ufeff'+[h,...rows.map(o=>[new Date(o.ts).toLocaleString(),o.name,o.room,o.phone,o.itemsText,o.total,o.status,o.paidAt?new Date(o.paidAt).toLocaleString():'',o.utr])].map(r=>r.map(q).join(',')).join('\r\n');
+  const chk=o=>o.ai?('amount '+(o.ai.amountOk?'ok':'no')+', success '+(o.ai.successOk?'ok':'no')+', recipient '+(o.ai.recipientOk?'ok':'not found')):'';
+  return '\ufeff'+[h,...rows.map(o=>[new Date(o.ts).toLocaleString(),o.name,o.room,o.phone,o.itemsText,o.total,o.status,o.paidAt?new Date(o.paidAt).toLocaleString():'',o.utr,chk(o)])].map(r=>r.map(q).join(',')).join('\r\n');
+}
+async function saveBlob(blob,name){
+  try{const dl=(window.claude&&claude.use)?await claude.use('downloads'):null;if(dl&&dl.save){await dl.save({filename:name,data:blob});return;}}catch(_){}
+  const a=document.createElement('a'),u=URL.createObjectURL(blob);a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),3000);
+}
+async function exportXlsx(){
+  vsay('Preparing Excel file…');
+  try{
+    if(!window.ExcelJS)await loadScript('https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js');
+    const wb=new ExcelJS.Workbook(),ws=wb.addWorksheet('Orders');
+    ws.columns=[{header:'Time',width:20},{header:'Name',width:18},{header:'Room',width:16},{header:'Phone',width:14},{header:'Items',width:34},{header:'Amount',width:9},{header:'Status',width:16},{header:'Paid at',width:20},{header:'UPI txn ID',width:18},{header:'Screenshot check',width:30},{header:'Payment screenshot',width:24}];
+    ws.getRow(1).font={bold:true};
+    rows.forEach((o,i)=>{
+      const chk=o.ai?('amount '+(o.ai.amountOk?'ok':'no')+', success '+(o.ai.successOk?'ok':'no')+', recipient '+(o.ai.recipientOk?'ok':'not found')):'';
+      const r=ws.addRow([new Date(o.ts).toLocaleString(),o.name,o.room,o.phone,o.itemsText,o.total,o.status,o.paidAt?new Date(o.paidAt).toLocaleString():'',o.utr,chk,'']);
+      r.alignment={vertical:'middle',wrapText:true};
+      if(o.shot){
+        const w=130,h=Math.round(w*((o.ai&&o.ai.ar)||1.8));
+        r.height=Math.round(h*0.75)+6;
+        const id=wb.addImage({base64:o.shot,extension:'jpeg'});
+        ws.addImage(id,{tl:{col:10,row:i+1},ext:{width:w,height:h}});
+      }
+    });
+    const buf=await wb.xlsx.writeBuffer();
+    await saveBlob(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),'orders.xlsx');
+    vsay('Excel file downloaded.');
+  }catch(err){
+    vsay('Excel export failed ('+(err&&err.message?err.message:'error')+'). Downloading CSV instead.');
+    await saveBlob(new Blob([csv()],{type:'text/csv'}),'orders.csv');
+  }
 }
 let unsub=null,renderSeq=0;
 const sel=new Set();
 function updateSel(){
   const n=sel.size;
   $('selCount').textContent=n?n+' selected':'';
-  $('cancelSel').disabled=!n;$('restoreSel').disabled=!n;
+  $('cancelSel').disabled=!n;
   $('selAll').checked=rows.length>0&&rows.every(o=>sel.has(o.id));
 }
-async function bulkCancel(on){
-  const targets=rows.filter(o=>sel.has(o.id)&&o.cancelled!==on);
-  if(!targets.length)return vsay(on?'Select at least one active order to cancel.':'Select at least one cancelled order to restore.');
-  if(on&&!confirm('Cancel '+targets.length+' selected order'+(targets.length>1?'s':'')+'?'))return;
-  vsay(on?'Cancelling…':'Restoring…');
+async function bulkCancel(){
+  const targets=rows.filter(o=>sel.has(o.id));
+  if(!targets.length)return vsay('Tick at least one order to cancel.');
+  if(!confirm('Cancel and remove '+targets.length+' selected order'+(targets.length>1?'s':'')+'? This deletes them (and any payment screenshot) permanently.'))return;
+  vsay('Cancelling…');
   try{
-    await Promise.all(targets.map(async o=>db.collection('orders').doc(o.id).update({cancelled:on?await enc({at:Date.now()}):null})));
+    await Promise.all(targets.map(o=>db.collection('orders').doc(o.id).delete()));
     targets.forEach(o=>sel.delete(o.id));
-    vsay(targets.length+' order'+(targets.length>1?'s':'')+(on?' cancelled.':' restored.'));
-  }catch(_){ vsay('Could not '+(on?'cancel':'restore')+' the selected orders. Check your connection and try again.'); }
+    vsay(targets.length+' order'+(targets.length>1?'s':'')+' cancelled and removed.');
+  }catch(_){ vsay('Could not cancel the selected orders. Check your connection and try again.'); }
   updateSel();
 }
 async function render(sn){
   const seq=++renderSeq;
   const next=(await Promise.all(sn.docs.map(async d=>{
     const x=d.data();try{const o=await dec(priv,x.enc);const pd=x.paid?await dec(priv,x.paid):null;
-      const cancelled=!!x.cancelled;
-      return {...o,id:d.id,ts:x.ts,cancelled,status:cancelled?'Cancelled':(pd?'Paid':'Awaiting payment'),utr:pd?pd.utr:'',paidAt:pd?pd.paidAt:null};}catch(_){return null;}
+      return {...o,id:d.id,ts:x.ts,status:pd?'Paid':'Awaiting payment',utr:pd?pd.utr:'',paidAt:pd?pd.paidAt:null,shot:pd?pd.shot:null,ai:pd?pd.ai:null};}catch(_){return null;}
   }))).filter(Boolean).sort((a,b)=>b.ts-a.ts);
   if(seq!==renderSeq||!priv)return;           // a newer snapshot arrived, or the page was locked
   rows=next;ids=sn.docs.map(d=>d.id);
   [...sel].forEach(id=>{if(!rows.some(o=>o.id===id))sel.delete(id);});
   const L=$('orderList');L.textContent='';
+  const edge=on=>on?'var(--accent,#ffc266)':'rgba(255,255,255,.12)';
   rows.forEach(o=>{
     const d=document.createElement('label');
-    d.style.cssText='display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border:1px solid '+(sel.has(o.id)?'var(--accent,#ffc266)':'rgba(255,255,255,.12)')+';border-radius:14px;font-size:.92rem;line-height:1.5;cursor:pointer'+(o.cancelled?';opacity:.55':'');
+    d.style.cssText='display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border:1px solid '+edge(sel.has(o.id))+';border-radius:14px;font-size:.92rem;line-height:1.5;cursor:pointer';
     const cb=document.createElement('input');cb.type='checkbox';cb.checked=sel.has(o.id);cb.style.cssText='width:20px;height:20px;margin-top:3px;flex:none';
-    cb.addEventListener('change',()=>{cb.checked?sel.add(o.id):sel.delete(o.id);d.style.borderColor=cb.checked?'var(--accent,#ffc266)':'rgba(255,255,255,.12)';updateSel();});
-    const box=document.createElement('div');
+    cb.addEventListener('change',()=>{cb.checked?sel.add(o.id):sel.delete(o.id);d.style.borderColor=edge(cb.checked);updateSel();});
+    const box=document.createElement('div');box.style.flex='1';
     const t=document.createElement('strong');t.textContent=(o.name||'')+' · '+(o.room||'')+' · ₹'+(o.total||0);
-    if(o.cancelled)t.style.textDecoration='line-through';
     const m=document.createElement('div');m.textContent=new Date(o.ts).toLocaleString()+' · '+(o.phone||'')+' · '+o.status+(o.utr?' · UTR '+o.utr:'');
     const i=document.createElement('div');i.textContent=o.itemsText||'';
-    box.append(t,m,i);d.append(cb,box);L.appendChild(d);
+    box.append(t,m,i);
+    if(o.ai){
+      const c=document.createElement('div');c.style.opacity='.8';
+      c.textContent='Screenshot check: amount '+(o.ai.amountOk?'✓':'✗')+' · success '+(o.ai.successOk?'✓':'✗')+' · recipient '+(o.ai.recipientOk?'✓':'not found');
+      box.append(c);
+    }
+    d.append(cb,box);
+    if(o.shot){
+      const im=document.createElement('img');im.src=o.shot;im.alt='Payment screenshot';
+      const small='width:64px;border-radius:8px;flex:none;cursor:zoom-in',big='width:min(260px,60vw);border-radius:8px;flex:none;cursor:zoom-out';
+      im.style.cssText=small;
+      im.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();im.style.cssText=im.style.width==='64px'?big:small;});
+      d.append(im);
+    }
+    L.appendChild(d);
   });
-  const act=rows.filter(o=>!o.cancelled),canc=rows.length-act.length;
-  const per={};act.forEach(o=>(o.items||[]).forEach(x=>per[x.n]=(per[x.n]||0)+x.q));
-  $('adminSum').textContent=act.length+' orders'+(canc?' ('+canc+' cancelled)':'')+' · ₹'+act.filter(o=>o.status==='Paid').reduce((a,o)=>a+o.total,0)+' marked paid · '+(Object.entries(per).map(([k,v])=>k+': '+v).join(' · ')||'no items yet');
+  const per={};rows.forEach(o=>(o.items||[]).forEach(x=>per[x.n]=(per[x.n]||0)+x.q));
+  $('adminSum').textContent=rows.length+' orders · ₹'+rows.filter(o=>o.status==='Paid').reduce((a,o)=>a+o.total,0)+' marked paid · '+(Object.entries(per).map(([k,v])=>k+': '+v).join(' · ')||'no items yet');
   updateSel();
 }
 $('selAll').addEventListener('change',e=>{
@@ -498,8 +630,7 @@ $('selAll').addEventListener('change',e=>{
   document.querySelectorAll('#orderList input[type=checkbox]').forEach((c,i)=>{c.checked=!!rows[i]&&sel.has(rows[i].id);c.parentElement.style.borderColor=c.checked?'var(--accent,#ffc266)':'rgba(255,255,255,.12)';});
   updateSel();
 });
-$('cancelSel').addEventListener('click',()=>bulkCancel(true));
-$('restoreSel').addEventListener('click',()=>bulkCancel(false));
+$('cancelSel').addEventListener('click',bulkCancel);
 async function load(){
   if(unsub){unsub();unsub=null;}
   await new Promise((res,rej)=>{
@@ -517,10 +648,8 @@ $('unlockBtn').addEventListener('click',async()=>{
   $('pw').value='';$('lock').hidden=true;$('open').hidden=false;vsay('');
 });
 $('lockBtn').addEventListener('click',()=>{if(unsub){unsub();unsub=null;}priv=null;rows=[];ids=[];sel.clear();renderSeq++;$('orderList').textContent='';$('adminSum').textContent='';$('selCount').textContent='';$('selAll').checked=false;$('open').hidden=true;$('lock').hidden=false;vsay('');});
-$('exportBtn').addEventListener('click',async()=>{
-  if(!priv)return;
-  try{const dl=(window.claude&&claude.use)?await claude.use('downloads'):null;if(dl)await dl.save({filename:'orders.csv',data:csv()});else{const a=document.createElement('a');const u=URL.createObjectURL(new Blob([csv()],{type:'text/csv'}));a.href=u;a.download='orders.csv';a.click();setTimeout(()=>URL.revokeObjectURL(u),2000);}}catch(_){}
-});
+$('exportBtn').addEventListener('click',()=>{if(priv)exportXlsx();});
+$('csvBtn').addEventListener('click',()=>{if(priv)saveBlob(new Blob([csv()],{type:'text/csv'}),'orders.csv');});
 let armed=false;
 $('resetBtn').addEventListener('click',async()=>{
   const b=$('resetBtn');
