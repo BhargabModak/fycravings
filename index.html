@@ -309,6 +309,12 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
       </div>
       <div id="open" hidden>
         <p class="note" id="adminSum"></p>
+        <div class="cta" style="justify-content:flex-start;margin-top:12px;align-items:center;gap:10px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="selAll" style="width:20px;height:20px"> Select all</label>
+          <button type="button" class="btn small" id="cancelSel">Cancel selected</button>
+          <button type="button" class="btn small" id="restoreSel">Restore selected</button>
+          <span class="note" id="selCount" style="margin:0"></span>
+        </div>
         <div id="orderList" style="margin-top:14px;display:grid;gap:10px"></div>
         <div class="cta" style="justify-content:flex-start;margin-top:12px">
           <button type="button" class="btn primary small" id="exportBtn">Download for Excel (.csv)</button>
@@ -439,44 +445,66 @@ function csv(){
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
   return '\ufeff'+[h,...rows.map(o=>[new Date(o.ts).toLocaleString(),o.name,o.room,o.phone,o.itemsText,o.total,o.status,o.paidAt?new Date(o.paidAt).toLocaleString():'',o.utr])].map(r=>r.map(q).join(',')).join('\r\n');
 }
-let unsub=null;
-async function setCancelled(id,on){
+let unsub=null,renderSeq=0;
+const sel=new Set();
+function updateSel(){
+  const n=sel.size;
+  $('selCount').textContent=n?n+' selected':'';
+  $('cancelSel').disabled=!n;$('restoreSel').disabled=!n;
+  $('selAll').checked=rows.length>0&&rows.every(o=>sel.has(o.id));
+}
+async function bulkCancel(on){
+  const targets=rows.filter(o=>sel.has(o.id)&&o.cancelled!==on);
+  if(!targets.length)return vsay(on?'Select at least one active order to cancel.':'Select at least one cancelled order to restore.');
+  if(on&&!confirm('Cancel '+targets.length+' selected order'+(targets.length>1?'s':'')+'?'))return;
+  vsay(on?'Cancelling…':'Restoring…');
   try{
-    await db.collection('orders').doc(id).update({cancelled:on?await enc({at:Date.now()}):null});
-  }catch(_){ vsay('Could not '+(on?'cancel':'restore')+' the order. Check your connection and try again.'); }
+    await Promise.all(targets.map(async o=>db.collection('orders').doc(o.id).update({cancelled:on?await enc({at:Date.now()}):null})));
+    targets.forEach(o=>sel.delete(o.id));
+    vsay(targets.length+' order'+(targets.length>1?'s':'')+(on?' cancelled.':' restored.'));
+  }catch(_){ vsay('Could not '+(on?'cancel':'restore')+' the selected orders. Check your connection and try again.'); }
+  updateSel();
 }
 async function render(sn){
-  ids=sn.docs.map(d=>d.id);
-  rows=(await Promise.all(sn.docs.map(async d=>{
+  const seq=++renderSeq;
+  const next=(await Promise.all(sn.docs.map(async d=>{
     const x=d.data();try{const o=await dec(priv,x.enc);const pd=x.paid?await dec(priv,x.paid):null;
       const cancelled=!!x.cancelled;
       return {...o,id:d.id,ts:x.ts,cancelled,status:cancelled?'Cancelled':(pd?'Paid':'Awaiting payment'),utr:pd?pd.utr:'',paidAt:pd?pd.paidAt:null};}catch(_){return null;}
   }))).filter(Boolean).sort((a,b)=>b.ts-a.ts);
+  if(seq!==renderSeq||!priv)return;           // a newer snapshot arrived, or the page was locked
+  rows=next;ids=sn.docs.map(d=>d.id);
+  [...sel].forEach(id=>{if(!rows.some(o=>o.id===id))sel.delete(id);});
   const L=$('orderList');L.textContent='';
   rows.forEach(o=>{
-    const d=document.createElement('div');
-    d.style.cssText='padding:12px 14px;border:1px solid rgba(255,255,255,.12);border-radius:14px;font-size:.92rem;line-height:1.5'+(o.cancelled?';opacity:.55':'');
+    const d=document.createElement('label');
+    d.style.cssText='display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border:1px solid '+(sel.has(o.id)?'var(--accent,#ffc266)':'rgba(255,255,255,.12)')+';border-radius:14px;font-size:.92rem;line-height:1.5;cursor:pointer'+(o.cancelled?';opacity:.55':'');
+    const cb=document.createElement('input');cb.type='checkbox';cb.checked=sel.has(o.id);cb.style.cssText='width:20px;height:20px;margin-top:3px;flex:none';
+    cb.addEventListener('change',()=>{cb.checked?sel.add(o.id):sel.delete(o.id);d.style.borderColor=cb.checked?'var(--accent,#ffc266)':'rgba(255,255,255,.12)';updateSel();});
+    const box=document.createElement('div');
     const t=document.createElement('strong');t.textContent=(o.name||'')+' · '+(o.room||'')+' · ₹'+(o.total||0);
     if(o.cancelled)t.style.textDecoration='line-through';
     const m=document.createElement('div');m.textContent=new Date(o.ts).toLocaleString()+' · '+(o.phone||'')+' · '+o.status+(o.utr?' · UTR '+o.utr:'');
     const i=document.createElement('div');i.textContent=o.itemsText||'';
-    const bt=document.createElement('button');bt.type='button';bt.className='btn small';bt.style.marginTop='8px';
-    bt.textContent=o.cancelled?'Restore order':'Cancel order';
-    bt.addEventListener('click',async()=>{
-      if(!o.cancelled&&!confirm('Cancel the order of '+(o.name||'this customer')+' (₹'+(o.total||0)+')?'))return;
-      bt.disabled=true;await setCancelled(o.id,!o.cancelled);
-    });
-    d.append(t,m,i,bt);L.appendChild(d);
+    box.append(t,m,i);d.append(cb,box);L.appendChild(d);
   });
   const act=rows.filter(o=>!o.cancelled),canc=rows.length-act.length;
   const per={};act.forEach(o=>(o.items||[]).forEach(x=>per[x.n]=(per[x.n]||0)+x.q));
   $('adminSum').textContent=act.length+' orders'+(canc?' ('+canc+' cancelled)':'')+' · ₹'+act.filter(o=>o.status==='Paid').reduce((a,o)=>a+o.total,0)+' marked paid · '+(Object.entries(per).map(([k,v])=>k+': '+v).join(' · ')||'no items yet');
+  updateSel();
 }
+$('selAll').addEventListener('change',e=>{
+  if(e.target.checked)rows.forEach(o=>sel.add(o.id));else sel.clear();
+  document.querySelectorAll('#orderList input[type=checkbox]').forEach((c,i)=>{c.checked=!!rows[i]&&sel.has(rows[i].id);c.parentElement.style.borderColor=c.checked?'var(--accent,#ffc266)':'rgba(255,255,255,.12)';});
+  updateSel();
+});
+$('cancelSel').addEventListener('click',()=>bulkCancel(true));
+$('restoreSel').addEventListener('click',()=>bulkCancel(false));
 async function load(){
   if(unsub){unsub();unsub=null;}
   await new Promise((res,rej)=>{
     let first=true;
-    unsub=db.collection('orders').onSnapshot(sn=>{render(sn).then(()=>{if(first){first=false;res();}});},err=>{if(first){first=false;rej(err);}});
+    unsub=db.collection('orders').onSnapshot(sn=>{render(sn).then(()=>{if(first){first=false;res();}});},err=>{if(first){first=false;rej(err);}else vsay('Live updates stopped. Reload the page.');});
   });
 }
 $('unlockBtn').addEventListener('click',async()=>{
@@ -485,13 +513,13 @@ $('unlockBtn').addEventListener('click',async()=>{
   vsay('Connecting to order storage…');
   await getDb();
   if(!db)return vsay('Password correct, but the database is not connected. Check the Firebase config in the page.');
-  try{await load();}catch(_){return vsay('Could not load orders.');}
+  try{await load();}catch(_){if(unsub){unsub();unsub=null;}priv=null;return vsay('Could not load orders. Check the database rules.');}
   $('pw').value='';$('lock').hidden=true;$('open').hidden=false;vsay('');
 });
-$('lockBtn').addEventListener('click',()=>{if(unsub){unsub();unsub=null;}priv=null;rows=[];ids=[];$('open').hidden=true;$('lock').hidden=false;vsay('');});
+$('lockBtn').addEventListener('click',()=>{if(unsub){unsub();unsub=null;}priv=null;rows=[];ids=[];sel.clear();renderSeq++;$('orderList').textContent='';$('adminSum').textContent='';$('selCount').textContent='';$('selAll').checked=false;$('open').hidden=true;$('lock').hidden=false;vsay('');});
 $('exportBtn').addEventListener('click',async()=>{
   if(!priv)return;
-  try{const dl=(window.claude&&claude.use)?await claude.use('downloads'):null;if(dl)await dl.save({filename:'orders.csv',data:csv()});else{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv()],{type:'text/csv'}));a.download='orders.csv';a.click();}}catch(_){}
+  try{const dl=(window.claude&&claude.use)?await claude.use('downloads'):null;if(dl)await dl.save({filename:'orders.csv',data:csv()});else{const a=document.createElement('a');const u=URL.createObjectURL(new Blob([csv()],{type:'text/csv'}));a.href=u;a.download='orders.csv';a.click();setTimeout(()=>URL.revokeObjectURL(u),2000);}}catch(_){}
 });
 let armed=false;
 $('resetBtn').addEventListener('click',async()=>{
