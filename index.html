@@ -317,6 +317,7 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
       </div>
       <div id="open" hidden>
         <p class="note" id="adminSum"></p>
+        <div id="orderList" style="margin-top:14px;display:grid;gap:10px"></div>
         <div class="cta" style="justify-content:flex-start;margin-top:12px">
           <button type="button" class="btn primary small" id="exportBtn">Download for Excel (.csv)</button>
           <button type="button" class="btn small" id="resetBtn">Reset orders</button>
@@ -334,6 +335,8 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
   <p>Midnight Cravings · Late night food delivery</p>
 </footer>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
 // Blurred page background reuses the preview photo
 document.getElementById('bg').style.backgroundImage = 'url(' + document.getElementById('bgsrc').src + ')';
@@ -462,29 +465,45 @@ function csv(){
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
   return '\ufeff'+[h,...rows.map(o=>[new Date(o.ts).toLocaleString(),o.name,o.room,o.phone,o.itemsText,o.total,o.status,o.utr])].map(r=>r.map(q).join(',')).join('\r\n');
 }
-async function load(){
-  const sn=await db.collection('orders').get();
+let unsub=null;
+async function render(sn){
   ids=sn.docs.map(d=>d.id);
   rows=(await Promise.all(sn.docs.map(async d=>{
     const x=d.data();try{const o=await dec(priv,x.enc);const pd=x.paid?await dec(priv,x.paid):null;
       return {...o,ts:x.ts,status:pd?'Paid (to verify)':'Awaiting payment',utr:pd?pd.utr:''};}catch(_){return null;}
   }))).filter(Boolean).sort((a,b)=>b.ts-a.ts);
+  const L=$('orderList');L.textContent='';
+  rows.forEach(o=>{
+    const d=document.createElement('div');
+    d.style.cssText='padding:12px 14px;border:1px solid rgba(255,255,255,.12);border-radius:14px;font-size:.92rem;line-height:1.5';
+    const t=document.createElement('strong');t.textContent=(o.name||'')+' · '+(o.room||'')+' · ₹'+(o.total||0);
+    const m=document.createElement('div');m.textContent=new Date(o.ts).toLocaleString()+' · '+(o.phone||'')+' · '+o.status+(o.utr?' · UTR '+o.utr:'');
+    const i=document.createElement('div');i.textContent=o.itemsText||'';
+    d.append(t,m,i);L.appendChild(d);
+  });
   const per={};rows.forEach(o=>(o.items||[]).forEach(x=>per[x.n]=(per[x.n]||0)+x.q));
   $('adminSum').textContent=rows.length+' orders · ₹'+rows.filter(o=>o.status!=='Awaiting payment').reduce((a,o)=>a+o.total,0)+' marked paid · '+(Object.entries(per).map(([k,v])=>k+': '+v).join(' · ')||'no items yet');
+}
+async function load(){
+  if(unsub){unsub();unsub=null;}
+  await new Promise((res,rej)=>{
+    let first=true;
+    unsub=db.collection('orders').onSnapshot(sn=>{render(sn).then(()=>{if(first){first=false;res();}});},err=>{if(first){first=false;rej(err);}});
+  });
 }
 $('unlockBtn').addEventListener('click',async()=>{
   vsay('Checking…');
   try{priv=await unlock($('pw').value);}catch(_){priv=null;$('pw').value='';return vsay('Access denied.');}
   vsay('Connecting to order storage…');
   await getDb();
-  if(!db)return vsay('Password correct, but order storage did not connect. Sign in to claude.ai in this browser, reload, and try again.');
+  if(!db)return vsay('Password correct, but the database is not connected. Check the Firebase config in the page.');
   try{await load();}catch(_){return vsay('Could not load orders.');}
   $('pw').value='';$('lock').hidden=true;$('open').hidden=false;vsay('');
 });
-$('lockBtn').addEventListener('click',()=>{priv=null;rows=[];ids=[];$('open').hidden=true;$('lock').hidden=false;vsay('');});
+$('lockBtn').addEventListener('click',()=>{if(unsub){unsub();unsub=null;}priv=null;rows=[];ids=[];$('open').hidden=true;$('lock').hidden=false;vsay('');});
 $('exportBtn').addEventListener('click',async()=>{
   if(!priv)return;
-  try{const dl=await claude.use('downloads');if(dl)await dl.save({filename:'orders.csv',data:csv()});else vsay('Downloads are not available here.');}catch(_){}
+  try{const dl=(window.claude&&claude.use)?await claude.use('downloads'):null;if(dl)await dl.save({filename:'orders.csv',data:csv()});else{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv()],{type:'text/csv'}));a.download='orders.csv';a.click();}}catch(_){}
 });
 let armed=false;
 $('resetBtn').addEventListener('click',async()=>{
@@ -492,12 +511,23 @@ $('resetBtn').addEventListener('click',async()=>{
   if(!priv)return;
   if(!armed){armed=true;b.textContent='Tap again to delete ALL orders';setTimeout(()=>{armed=false;b.textContent='Reset orders';},5000);return;}
   armed=false;b.textContent='Reset orders';
-  try{await Promise.all(ids.map(id=>db.collection('orders').doc(id).delete()));await load();}catch(_){vsay('Reset failed.');}
+  try{await Promise.all(ids.map(id=>db.collection('orders').doc(id).delete()));}catch(_){vsay('Reset failed.');}
 });
+// ===== Firebase Firestore (for GitHub Pages) =====
+const FIREBASE_CONFIG={
+  apiKey:"AIzaSyBYMKYUgQCsXpuDnQ8zDDc7dH07YPa9zbM",
+  authDomain:"fydelivery-fc8f8.firebaseapp.com",
+  projectId:"fydelivery-fc8f8",
+  appId:"1:526339958325:web:5a8b42847ca0084ba0b37c"
+};
 async function getDb(){
   if(db)return db;
-  if(!(window.claude&&claude.use))return null;
-  try{db=await claude.use('db');}catch(_){}
+  try{
+    if(window.firebase&&!FIREBASE_CONFIG.apiKey.startsWith('PASTE')){
+      if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);
+      db=firebase.firestore();
+    }else if(window.claude&&claude.use){db=await claude.use('db');}
+  }catch(_){}
   return db||null;
 }
 getDb();
