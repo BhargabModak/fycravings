@@ -475,7 +475,9 @@ async function load(){
 $('unlockBtn').addEventListener('click',async()=>{
   vsay('Checking…');
   try{priv=await unlock($('pw').value);}catch(_){priv=null;$('pw').value='';return vsay('Access denied.');}
-  if(!db)return vsay('Password correct, but order storage is not available. Open this page signed in.');
+  vsay('Connecting to order storage…');
+  await getDb();
+  if(!db)return vsay('Password correct, but order storage did not connect. Sign in to claude.ai in this browser, reload, and try again.');
   try{await load();}catch(_){return vsay('Could not load orders.');}
   $('pw').value='';$('lock').hidden=true;$('open').hidden=false;vsay('');
 });
@@ -492,10 +494,13 @@ $('resetBtn').addEventListener('click',async()=>{
   armed=false;b.textContent='Reset orders';
   try{await Promise.all(ids.map(id=>db.collection('orders').doc(id).delete()));await load();}catch(_){vsay('Reset failed.');}
 });
-(async()=>{
-  if(!(window.claude&&claude.use))return;
+async function getDb(){
+  if(db)return db;
+  if(!(window.claude&&claude.use))return null;
   try{db=await claude.use('db');}catch(_){}
-})();
+  return db||null;
+}
+getDb();
 refresh();
 </script>
 </body>
