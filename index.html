@@ -432,7 +432,7 @@ $('placeBtn').addEventListener('click',async()=>{
   orderId='o'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const L=lines();
   const ok=await save(async()=>db.collection('orders').doc(orderId).set({ts:Date.now(),enc:await enc({name,room,phone,items:L,itemsText:L.map(x=>x.n+' x'+x.q).join(', '),total:t})}));
-  payTapped=false;$('paidBtn').disabled=true;
+  payTapped=false;$('paidBtn').disabled=true;$('paidBtn').textContent="I've paid";delete $('paidBtn').dataset.done;$('oUtr').disabled=false;$('oUtr').value='';
   $('amt').value=t;$('who').value=name+' – '+room;refresh();$('paidBox').hidden=false;
   osay(ok?'Order saved. Now pay ₹'+t+' below. "I\'ve paid" unlocks after you pay.':'Could not save online. Pay below and call 9239048437 with your order.');
   $('pay').scrollIntoView();
@@ -446,23 +446,25 @@ document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='visible'&&payTapped&&orderId){$('paidBtn').disabled=false;osay('Welcome back! If your payment went through, tap "I\'ve paid".');}
 });
 $('paidBtn').addEventListener('click',async()=>{
-  if(!orderId)return;
+  if(!orderId||$('paidBtn').dataset.done)return;
+  const btn=$('paidBtn');btn.disabled=true;btn.textContent='Saving…';
   const ok=await save(async()=>db.collection('orders').doc(orderId).update({paid:await enc({utr:$('oUtr').value.trim(),paidAt:Date.now()})}));
-  osay(ok?'Thanks! Your payment is noted.':'Could not save. Please call 9239048437.');
+  if(ok){btn.dataset.done='1';btn.textContent='Paid ✓';$('oUtr').disabled=true;osay('Thanks! Your payment is recorded as Paid.');}
+  else{btn.disabled=false;btn.textContent="I've paid";osay('Could not save. Please call 9239048437.');}
 });
 
 // ===== Password-protected order list =====
 function csv(){
-  const h=['Time','Name','Room','Phone','Items','Amount','Status','UPI txn ID'];
+  const h=['Time','Name','Room','Phone','Items','Amount','Status','Paid at','UPI txn ID'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-  return '\ufeff'+[h,...rows.map(o=>[new Date(o.ts).toLocaleString(),o.name,o.room,o.phone,o.itemsText,o.total,o.status,o.utr])].map(r=>r.map(q).join(',')).join('\r\n');
+  return '\ufeff'+[h,...rows.map(o=>[new Date(o.ts).toLocaleString(),o.name,o.room,o.phone,o.itemsText,o.total,o.status,o.paidAt?new Date(o.paidAt).toLocaleString():'',o.utr])].map(r=>r.map(q).join(',')).join('\r\n');
 }
 let unsub=null;
 async function render(sn){
   ids=sn.docs.map(d=>d.id);
   rows=(await Promise.all(sn.docs.map(async d=>{
     const x=d.data();try{const o=await dec(priv,x.enc);const pd=x.paid?await dec(priv,x.paid):null;
-      return {...o,ts:x.ts,status:pd?'Paid (to verify)':'Awaiting payment',utr:pd?pd.utr:''};}catch(_){return null;}
+      return {...o,ts:x.ts,status:pd?'Paid':'Awaiting payment',utr:pd?pd.utr:'',paidAt:pd?pd.paidAt:null};}catch(_){return null;}
   }))).filter(Boolean).sort((a,b)=>b.ts-a.ts);
   const L=$('orderList');L.textContent='';
   rows.forEach(o=>{
