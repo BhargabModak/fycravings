@@ -269,7 +269,7 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
 <section id="pay">
   <div class="wrap">
     <h2>Pay with UPI</h2>
-    <p class="lead">Enter your order amount and tap pay. We copy the UPI ID for you; paste it in your UPI app and pay.</p>
+    <p class="lead">Enter your order amount and tap pay. Your phone's UPI app opens to pay the UPI ID below.</p>
     <div class="pay-grid">
       <div class="card">
         <label class="field"><span>Amount (₹)</span>
@@ -338,6 +338,14 @@ const UPI = { pa: "9729993078@pthdfc", pn: "Ms RAJWANT KAUR", note: "Midnight Cr
 const $ = id => document.getElementById(id);
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/i.test(navigator.platform));
 
+function upiQuery(){
+  const a = parseFloat($('amt').value);
+  const who = $('who').value.trim();
+  let q = 'pa=' + UPI.pa + '&pn=' + encodeURIComponent(UPI.pn) + '&cu=INR';
+  if (a >= 1) q += '&am=' + a.toFixed(2);
+  q += '&tn=' + encodeURIComponent(UPI.note + (who ? ' - ' + who : ''));
+  return q;
+}
 function refresh(){
   const a = parseFloat($('amt').value);
   $('payAmt').textContent = a >= 1 ? '₹' + a : 'the amount';
@@ -352,13 +360,13 @@ async function copyId(){
     }catch(__){ return false; }
   }
 }
-async function payWithId(appUrl){
+async function payWithId(scheme){
   const a = parseFloat($('amt').value);
-  if (!(a >= 1)) { say('Enter your order amount first.'); return false; }
+  if (!(a >= 1)) { say('Enter your order amount first.'); return; }
   const ok = await copyId();
-  say((ok ? 'UPI ID copied: ' : 'UPI ID: ') + UPI.pa + '. Open your UPI app → Pay to UPI ID → paste it → enter ₹' + a + ' → pay.');
-  if (appUrl && isMobile) setTimeout(() => { window.location.href = appUrl; }, 400);
-  return true;
+  if (!isMobile){ say('Open this page on your phone to pay. UPI ID' + (ok ? ' copied: ' : ': ') + UPI.pa); return; }
+  say('Opening your UPI app to pay ₹' + a + ' to ' + UPI.pa + '. If it asks for an ID, paste the copied one.');
+  setTimeout(() => { window.location.href = scheme + '?' + upiQuery(); }, 300);
 }
 
 $('payeeName').textContent = UPI.pn.replace(/\s+/g,' ');
@@ -367,8 +375,8 @@ $('amt').addEventListener('input', refresh);
 $('who').addEventListener('input', refresh);
 document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => { $('amt').value = c.dataset.amt; refresh(); }));
 
-$('payBtn').addEventListener('click', () => { if (orderId) payWithId(''); });
-[['gpay','tez://'],['phonepe','phonepe://'],['paytm','paytmmp://']].forEach(([id,url]) => $(id).addEventListener('click', e => { e.preventDefault(); if (orderId) payWithId(url); }));
+$('payBtn').addEventListener('click', () => { if (orderId) payWithId('upi://pay'); });
+[['gpay','tez://upi/pay'],['phonepe','phonepe://pay'],['paytm','paytmmp://pay']].forEach(([id,u]) => $(id).addEventListener('click', e => { e.preventDefault(); if (orderId) payWithId(u); }));
 
 $('copyUpi').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(UPI.pa); say('UPI ID copied.'); }
