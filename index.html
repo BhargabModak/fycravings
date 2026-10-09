@@ -128,6 +128,7 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
 .menurow.off{opacity:.5}
 #adminTbl{border-collapse:collapse;width:100%;font-size:.85rem}
 #adminTbl th,#adminTbl td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.12);text-align:left;white-space:nowrap}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
 </style>
 </head>
 <body>
@@ -257,14 +258,9 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
         <button type="button" class="btn primary full" id="placeBtn">Place order</button>
         <div id="paidBox" hidden>
           <label class="field" style="margin-top:14px"><span>UPI transaction ID (optional)</span><input id="oUtr" maxlength="30"></label>
-          <button type="button" class="btn full" id="paidBtn">I've paid</button>
+          <button type="button" class="btn full" id="paidBtn" disabled>I've paid</button>
         </div>
         <p class="status" id="orderStatus" role="status" aria-live="polite"></p>
-        <div id="admin" hidden style="margin-top:16px">
-          <p class="note" id="adminSum"></p>
-          <button type="button" class="btn small" id="exportBtn">Download orders for Excel (.csv)</button>
-          <button type="button" class="btn small" id="resetBtn">Reset orders</button>
-        </div>
       </div>
     </div>
   </div>
@@ -279,6 +275,7 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
         <label class="field"><span>Amount (₹)</span>
           <input id="amt" type="number" inputmode="decimal" min="1" step="1" placeholder="e.g. 65" autocomplete="off"></label>
         <div class="chips" role="group" aria-label="Quick amounts">
+          <button type="button" class="chip" data-amt="20">₹20</button>
           <button type="button" class="chip" data-amt="45">₹45</button>
           <button type="button" class="chip" data-amt="65">₹65</button>
           <button type="button" class="chip" data-amt="80">₹80</button>
@@ -306,6 +303,27 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
         </a>
         <div class="qramt" id="qrAmt"></div>
       </div>
+    </div>
+  </div>
+</section>
+<section id="vault">
+  <div class="wrap">
+    <div class="card">
+      <h2>Order list</h2>
+      <p class="note">For the kitchen owner only. Enter the password to view orders.</p>
+      <div id="lock">
+        <label class="field"><span>Password</span><input id="pw" type="password" autocomplete="off"></label>
+        <button type="button" class="btn primary" id="unlockBtn">View orders</button>
+      </div>
+      <div id="open" hidden>
+        <p class="note" id="adminSum"></p>
+        <div class="cta" style="justify-content:flex-start;margin-top:12px">
+          <button type="button" class="btn primary small" id="exportBtn">Download for Excel (.csv)</button>
+          <button type="button" class="btn small" id="resetBtn">Reset orders</button>
+          <button type="button" class="btn small" id="lockBtn">Lock</button>
+        </div>
+      </div>
+      <p class="status" id="vaultStatus" role="status" aria-live="polite"></p>
     </div>
   </div>
 </section>
@@ -374,8 +392,30 @@ $('copyUpi').addEventListener('click', async () => {
   catch (_) { say('Copy failed. UPI ID: ' + UPI.pa); }
 });
 // ===== Orders =====
-const MENU=[{n:"Red Sauce Pasta + Masala Soda",p:100},{n:"Red Sauce Pasta",p:80},{n:"Masala Fried Maggi",p:45},{n:"Masala Fried Maggi + Masala Soda",p:65}];
-let db=null,orderId=null,rows=[],ids=[],armed=false;const qtys=[];
+const KEYS={"pub": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxTNQl24wzisDODqPf9ASn8gr9uSj5u4mUtmw6snHL2MAMhGj7MeMY14UwbwJMBuCUYqffCaXSFs+0+4AT8XZqL264YH7o9hjJ+/HTp4Pn56NpDOr+Jk2EWJgogAtsClexaFG3FwGgr65W2a53soqNmSV/+nCJrgeqLIq2LHDjd1MowuAiib+xsAmWdtZorCl1aUnoqU2ViKyeH+W8v7xviorx+gYFQEVnjTIZRpK0xsAdnO5f2o17xsGN8PXNQFCU5P0t4UoTuPdoDmO9yBT7gSysjTGOZwr9skoH4OF3LAz1Y1XgKoeAgeA37z+LvEwtNwQcRsLyKbnrbzITlx5NQIDAQAB", "salt": "JFbNL4VzmMW3gq9vcqDwng==", "iv": "73A37ZF3GHtYiXeM", "ct": "axxR6rC32eyhkfjZasC7QTvIslJOu6YVNSB5GR/XtoF81UxwYPCANGSLKHTu6pYCmOD+TV0yfQgGkkBPzuPHKk7TLnjKy5ImQiVOn5Y87OYKlgizK2WrBGy99rc4r6s5Lv1ZQ0iUniUSMSrlbU/xk9vueoTjN67Roosu0xsHkFWdCXPNaRiHLMbe4FRZuDbKDjvM7LoDfjsE2ssRC1SYaGryylSGgeq4WERSNTEx9aCTDBGEdon9yj9H8znmWZWZqO0sTaL3OGDqADNYjEhkPSznTZz+ho8mOSRCHOTYNRKFPQa9xk2EReJJNgu35ZzON0+n3Qt2Y2CnK7CjnQcLcHYsqrDxzfeyBs8h9K9tGTSodvwrh7aEdEfE3vop15FSab9HSdypMI8yeGEAFrXGG8BJixQIrixxIn1GZ8Iyv9dkRo3jayyeQdbUVdKp0bZb00qmPGnO6RnjGhX8J3wlZ830EotKMp+cftTDApRrpcViENI2McnfC1tIXJgoa01Z+lodLdHl1zDhGFgXBnCZB5jbfjiymu+LcReubx7tBYV8MJBXUuY+KVLhMumU5mAxZvpJljtN9oF5bWs9if7TdE+RemguMl7XdhpfCIeVTTsAJSW4rjv12MZ/OHUU6tAxo9FPUi7r6bFDkJt5A1CaI1O4LN/d+15xizsgzU+VcRTceOLXQ/n/SwCxppuZY2EkwJ3bnzqlapYK47ZVuBkd0fvBvymBPaOXJ+mO+twldKdDViFUjmN9EIEjsE0qKDjOPdJG6uLtHJVeADj3ri/vo1iByu2fmrjehbpQa8biITamJKZi8bB7etqHfm1kVVcKJz7StWks9ndp2hZQA93Bz/t+I2zBP8yMp9vMtn+iAIGms73EkOIS7VZJbDRVlKcON/5ydtC/e1rG9YggwNvnFysw8It+i9VpYGIZxRRKiSbq/9CugMsXRb0E4JfSLpvJlkl+Qj+rIIUpvlFQ5fROZ/THTft5OQwGw75VXYkVhRF81wEDjbV53Le1lH6XJvQcUQ8nIkX+UYCV537dK7qa6jbo+Qu/WnsnruFgZsB4uYEGrBfUcOeM4+qL1H115rF7+4IGSiLOJHxBg6ZSdUP+381MAoFpzVXck/JXFEnSD3fHX6z3G9COuju6pITjY0GU7CJsvt0lRWktA7tfS/v2MFp3LE1ugn7LVXeOz5YN9azXxf3oNYqPhLnN038w+Gfmb8ELo2acF08zSiSS8iZ05viIUnYsBzsECKYu4hSbUZPNGs+3ssy1hWtEXJ0lJ49SibMs/a/j9DKNVYizLsJoZJHQfCL7LIji38i/Leh41w2eFWELWZh86jHQ8e3tkS+GBsMI8sB+0ImGGW7akPjH8pazciKpL77cDkJO/N198XWfwRAXSpQcBx4u/0k16sNoS9+ukWa51wzuXhh9EpU9X6H+ARsOMJEFvMvjnM85ypIYUaCVjrZlN9hIBHA4ukAt2RZaVY917dKjZWn6aCKHO1YN7GtYQLRX+65neoxlSkzTwG+hhtGTs9Ie+YUtlJ0jXn+YcAe83oQxnLWgdCy8virv5RNFNHatZYwmWBK/1zoixxozLDB1M2c0l0UmrusbNYYVWvoHaFPwtsub26LzVbyP0ki8MvF6L1m8gE1JKw5IJ1I="};
+const b64d=x=>Uint8Array.from(atob(x),c=>c.charCodeAt(0));
+const b64e=u=>btoa(String.fromCharCode(...new Uint8Array(u)));
+async function enc(obj){
+  const pub=await crypto.subtle.importKey('spki',b64d(KEYS.pub),{name:'RSA-OAEP',hash:'SHA-256'},false,['encrypt']);
+  const k=await crypto.subtle.generateKey({name:'AES-GCM',length:256},true,['encrypt']);
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},k,new TextEncoder().encode(JSON.stringify(obj)));
+  const wk=await crypto.subtle.encrypt({name:'RSA-OAEP'},pub,await crypto.subtle.exportKey('raw',k));
+  return {k:b64e(wk),iv:b64e(iv),ct:b64e(ct)};
+}
+async function unlock(pw){
+  const base=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);
+  const key=await crypto.subtle.deriveKey({name:'PBKDF2',salt:b64d(KEYS.salt),iterations:600000,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['decrypt']);
+  const pk=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64d(KEYS.iv)},key,b64d(KEYS.ct));
+  return crypto.subtle.importKey('pkcs8',pk,{name:'RSA-OAEP',hash:'SHA-256'},false,['decrypt']);
+}
+async function dec(priv,e){
+  const raw=await crypto.subtle.decrypt({name:'RSA-OAEP'},priv,b64d(e.k));
+  const k=await crypto.subtle.importKey('raw',raw,'AES-GCM',false,['decrypt']);
+  return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:b64d(e.iv)},k,b64d(e.ct))));
+}
+const MENU=[{n:"Red Sauce Pasta + Masala Soda",p:100},{n:"Red Sauce Pasta",p:80},{n:"Masala Fried Maggi",p:45},{n:"Masala Fried Maggi + Masala Soda",p:65},{n:"Masala Soda",p:20}];
+let db=null,orderId=null,payTapped=false,priv=null,rows=[],ids=[];const qtys=[];
 MENU.forEach(m=>{
   const r=document.createElement('div');r.className='menurow';
   const l=document.createElement('span');l.textContent=m.n+' – ₹'+m.p;
@@ -386,7 +426,9 @@ const lines=()=>MENU.map((m,i)=>({n:m.n,p:m.p,q:Math.max(0,Math.min(10,parseInt(
 const total=()=>lines().reduce((a,x)=>a+x.p*x.q,0);
 function calc(){$('orderTotal').textContent='Total: ₹'+total();}
 const osay=t=>{$('orderStatus').textContent=t;};
+const vsay=t=>{$('vaultStatus').textContent=t;};
 async function save(fn){try{if(!db)return false;await fn();return true;}catch(_){return false;}}
+
 $('placeBtn').addEventListener('click',async()=>{
   const name=$('oName').value.trim(),room=$('oRoom').value.trim(),phone=$('oPhone').value.trim(),t=total();
   if(!t)return osay('Pick at least one item.');
@@ -394,42 +436,65 @@ $('placeBtn').addEventListener('click',async()=>{
   if(!/^\d{10}$/.test(phone))return osay('Enter a 10-digit phone number.');
   orderId='o'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const L=lines();
-  const ok=await save(()=>db.collection('orders').doc(orderId).set({ts:Date.now(),name,room,phone,items:L,itemsText:L.map(x=>x.n+' x'+x.q).join(', '),total:t,status:'Awaiting payment',utr:''}));
+  const ok=await save(async()=>db.collection('orders').doc(orderId).set({ts:Date.now(),enc:await enc({name,room,phone,items:L,itemsText:L.map(x=>x.n+' x'+x.q).join(', '),total:t})}));
+  payTapped=false;$('paidBtn').disabled=true;
   $('amt').value=t;$('who').value=name+' – '+room;refresh();$('paidBox').hidden=false;
-  osay(ok?'Order saved. Now pay ₹'+t+' below, then tap "I\'ve paid".':'Could not save online. Pay below and call 9239048437 with your order.');
+  osay(ok?'Order saved. Now pay ₹'+t+' below. "I\'ve paid" unlocks after you pay.':'Could not save online. Pay below and call 9239048437 with your order.');
   $('pay').scrollIntoView();
+});
+['payBtn','qrLink','gpay','phonepe','paytm'].forEach(id=>$(id).addEventListener('click',()=>{
+  if(!orderId)return say('Place your order first, then pay.');
+  payTapped=true;
+  setTimeout(()=>{$('paidBtn').disabled=false;},30000);
+}));
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'&&payTapped&&orderId){$('paidBtn').disabled=false;osay('Welcome back! If your payment went through, tap "I\'ve paid".');}
 });
 $('paidBtn').addEventListener('click',async()=>{
   if(!orderId)return;
-  const ok=await save(()=>db.collection('orders').doc(orderId).update({status:'Paid (to verify)',utr:$('oUtr').value.trim(),paidAt:Date.now()}));
+  const ok=await save(async()=>db.collection('orders').doc(orderId).update({paid:await enc({utr:$('oUtr').value.trim(),paidAt:Date.now()})}));
   osay(ok?'Thanks! Your payment is noted.':'Could not save. Please call 9239048437.');
 });
+
+// ===== Password-protected order list =====
 function csv(){
   const h=['Time','Name','Room','Phone','Items','Amount','Status','UPI txn ID'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
   return '\ufeff'+[h,...rows.map(o=>[new Date(o.ts).toLocaleString(),o.name,o.room,o.phone,o.itemsText,o.total,o.status,o.utr])].map(r=>r.map(q).join(',')).join('\r\n');
 }
+async function load(){
+  const sn=await db.collection('orders').get();
+  ids=sn.docs.map(d=>d.id);
+  rows=(await Promise.all(sn.docs.map(async d=>{
+    const x=d.data();try{const o=await dec(priv,x.enc);const pd=x.paid?await dec(priv,x.paid):null;
+      return {...o,ts:x.ts,status:pd?'Paid (to verify)':'Awaiting payment',utr:pd?pd.utr:''};}catch(_){return null;}
+  }))).filter(Boolean).sort((a,b)=>b.ts-a.ts);
+  const per={};rows.forEach(o=>(o.items||[]).forEach(x=>per[x.n]=(per[x.n]||0)+x.q));
+  $('adminSum').textContent=rows.length+' orders · ₹'+rows.filter(o=>o.status!=='Awaiting payment').reduce((a,o)=>a+o.total,0)+' marked paid · '+(Object.entries(per).map(([k,v])=>k+': '+v).join(' · ')||'no items yet');
+}
+$('unlockBtn').addEventListener('click',async()=>{
+  vsay('Checking…');
+  try{priv=await unlock($('pw').value);}catch(_){priv=null;$('pw').value='';return vsay('Access denied.');}
+  if(!db)return vsay('Password correct, but order storage is not available. Open this page signed in.');
+  try{await load();}catch(_){return vsay('Could not load orders.');}
+  $('pw').value='';$('lock').hidden=true;$('open').hidden=false;vsay('');
+});
+$('lockBtn').addEventListener('click',()=>{priv=null;rows=[];ids=[];$('open').hidden=true;$('lock').hidden=false;vsay('');});
+$('exportBtn').addEventListener('click',async()=>{
+  if(!priv)return;
+  try{const dl=await claude.use('downloads');if(dl)await dl.save({filename:'orders.csv',data:csv()});else vsay('Downloads are not available here.');}catch(_){}
+});
+let armed=false;
+$('resetBtn').addEventListener('click',async()=>{
+  const b=$('resetBtn');
+  if(!priv)return;
+  if(!armed){armed=true;b.textContent='Tap again to delete ALL orders';setTimeout(()=>{armed=false;b.textContent='Reset orders';},5000);return;}
+  armed=false;b.textContent='Reset orders';
+  try{await Promise.all(ids.map(id=>db.collection('orders').doc(id).delete()));await load();}catch(_){vsay('Reset failed.');}
+});
 (async()=>{
   if(!(window.claude&&claude.use))return;
   try{db=await claude.use('db');}catch(_){}
-  try{
-    const user=await claude.use('user');
-    if(db&&user&&user.isOwner()){
-      $('admin').hidden=false;
-      db.collection('orders').onSnapshot(sn=>{
-        ids=sn.docs.map(d=>d.id);rows=sn.docs.map(d=>d.data()).sort((a,b)=>b.ts-a.ts);
-        const per={};rows.forEach(o=>(o.items||[]).forEach(x=>per[x.n]=(per[x.n]||0)+x.q));
-        $('adminSum').textContent=rows.length+' orders · ₹'+rows.filter(o=>o.status!=='Awaiting payment').reduce((a,o)=>a+o.total,0)+' marked paid · '+Object.entries(per).map(([k,v])=>k+': '+v).join(' · ');
-      });
-      $('resetBtn').addEventListener('click',async()=>{
-        const b=$('resetBtn');
-        if(!armed){armed=true;b.textContent='Tap again to delete ALL orders';setTimeout(()=>{armed=false;b.textContent='Reset orders';},5000);return;}
-        armed=false;b.textContent='Reset orders';
-        try{await Promise.all(ids.map(id=>db.collection('orders').doc(id).delete()));}catch(_){b.textContent='Reset failed';}
-      });
-      $('exportBtn').addEventListener('click',async()=>{const dl=await claude.use('downloads');if(dl)try{await dl.save({filename:'orders.csv',data:csv()});}catch(_){}});
-    }
-  }catch(_){}
 })();
 refresh();
 </script>
