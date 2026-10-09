@@ -260,13 +260,12 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
           <button type="button" class="btn full" id="paidBtn">I've paid</button>
         </div>
         <p class="status" id="orderStatus" role="status" aria-live="polite"></p>
+        <div id="admin" hidden style="margin-top:16px">
+          <p class="note" id="adminSum"></p>
+          <button type="button" class="btn small" id="exportBtn">Download orders for Excel (.csv)</button>
+          <button type="button" class="btn small" id="resetBtn">Reset orders</button>
+        </div>
       </div>
-    </div>
-    <div class="card" id="admin" hidden style="margin-top:28px">
-      <h2>Orders (owner only)</h2>
-      <p class="note" id="adminSum"></p>
-      <div style="overflow-x:auto"><table id="adminTbl"></table></div>
-      <button type="button" class="btn primary" id="exportBtn" style="margin-top:14px">Download for Excel (.csv)</button>
     </div>
   </div>
 </section>
@@ -280,11 +279,10 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
         <label class="field"><span>Amount (₹)</span>
           <input id="amt" type="number" inputmode="decimal" min="1" step="1" placeholder="e.g. 65" autocomplete="off"></label>
         <div class="chips" role="group" aria-label="Quick amounts">
-          <button type="button" class="chip" data-amt="20">₹20</button>
           <button type="button" class="chip" data-amt="45">₹45</button>
-          <button type="button" class="chip" data-amt="50">₹50</button>
+          <button type="button" class="chip" data-amt="65">₹65</button>
+          <button type="button" class="chip" data-amt="80">₹80</button>
           <button type="button" class="chip" data-amt="100">₹100</button>
-          <button type="button" class="chip" data-amt="150">₹150</button>
         </div>
         <label class="field"><span>Your name &amp; room no. (shown as payment note)</span>
           <input id="who" type="text" maxlength="40" placeholder="e.g. Riya – Room 214" autocomplete="name"></label>
@@ -376,21 +374,19 @@ $('copyUpi').addEventListener('click', async () => {
   catch (_) { say('Copy failed. UPI ID: ' + UPI.pa); }
 });
 // ===== Orders =====
-const MENU=[{n:"Masala fried Maggie",p:45},{n:"Chicken curry",p:null},{n:"Potato curry",p:null},{n:"Hakka noodles",p:null},{n:"Fried rice",p:null},{n:"Spicy chicken",p:null},{n:"Masala soda",p:null}];
-let db=null,orderId=null,lastTotal=0;
-const qtys=[];
-MENU.forEach((m,i)=>{
-  const r=document.createElement('div');r.className='menurow'+(m.p==null?' off':'');
-  const l=document.createElement('span');l.textContent=m.n+(m.p==null?' (price coming soon)':' – ₹'+m.p);
-  const q=document.createElement('input');q.type='number';q.min=0;q.max=10;q.value=0;q.disabled=m.p==null;q.setAttribute('aria-label',m.n+' quantity');
+const MENU=[{n:"Red Sauce Pasta + Masala Soda",p:100},{n:"Red Sauce Pasta",p:80},{n:"Masala Fried Maggi",p:45},{n:"Masala Fried Maggi + Masala Soda",p:65}];
+let db=null,orderId=null,rows=[],ids=[],armed=false;const qtys=[];
+MENU.forEach(m=>{
+  const r=document.createElement('div');r.className='menurow';
+  const l=document.createElement('span');l.textContent=m.n+' – ₹'+m.p;
+  const q=document.createElement('input');q.type='number';q.min=0;q.max=10;q.value=0;q.setAttribute('aria-label',m.n+' quantity');
   q.addEventListener('input',calc);qtys.push(q);r.append(l,q);$('menuRows').append(r);
 });
-function lines(){return MENU.map((m,i)=>({n:m.n,p:m.p,q:Math.max(0,Math.min(10,parseInt(qtys[i].value)||0))})).filter(x=>x.p!=null&&x.q>0);}
-function total(){return lines().reduce((a,x)=>a+x.p*x.q,0);}
+const lines=()=>MENU.map((m,i)=>({n:m.n,p:m.p,q:Math.max(0,Math.min(10,parseInt(qtys[i].value)||0))})).filter(x=>x.q>0);
+const total=()=>lines().reduce((a,x)=>a+x.p*x.q,0);
 function calc(){$('orderTotal').textContent='Total: ₹'+total();}
 const osay=t=>{$('orderStatus').textContent=t;};
 async function save(fn){try{if(!db)return false;await fn();return true;}catch(_){return false;}}
-
 $('placeBtn').addEventListener('click',async()=>{
   const name=$('oName').value.trim(),room=$('oRoom').value.trim(),phone=$('oPhone').value.trim(),t=total();
   if(!t)return osay('Pick at least one item.');
@@ -399,8 +395,7 @@ $('placeBtn').addEventListener('click',async()=>{
   orderId='o'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   const L=lines();
   const ok=await save(()=>db.collection('orders').doc(orderId).set({ts:Date.now(),name,room,phone,items:L,itemsText:L.map(x=>x.n+' x'+x.q).join(', '),total:t,status:'Awaiting payment',utr:''}));
-  lastTotal=t;$('amt').value=t;$('who').value=name+' – '+room;refresh();
-  $('paidBox').hidden=false;
+  $('amt').value=t;$('who').value=name+' – '+room;refresh();$('paidBox').hidden=false;
   osay(ok?'Order saved. Now pay ₹'+t+' below, then tap "I\'ve paid".':'Could not save online. Pay below and call 9239048437 with your order.');
   $('pay').scrollIntoView();
 });
@@ -409,22 +404,10 @@ $('paidBtn').addEventListener('click',async()=>{
   const ok=await save(()=>db.collection('orders').doc(orderId).update({status:'Paid (to verify)',utr:$('oUtr').value.trim(),paidAt:Date.now()}));
   osay(ok?'Thanks! Your payment is noted.':'Could not save. Please call 9239048437.');
 });
-
-// owner-only order log + Excel export
-let rows=[];
 function csv(){
   const h=['Time','Name','Room','Phone','Items','Amount','Status','UPI txn ID'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
   return '\ufeff'+[h,...rows.map(o=>[new Date(o.ts).toLocaleString(),o.name,o.room,o.phone,o.itemsText,o.total,o.status,o.utr])].map(r=>r.map(q).join(',')).join('\r\n');
-}
-function renderAdmin(){
-  const t=$('adminTbl');t.textContent='';
-  const add=(tag,vals)=>{const tr=t.insertRow();vals.forEach(v=>{const c=document.createElement(tag);c.textContent=v;tr.append(c);});};
-  add('th',['Time','Name','Room','Phone','Items','₹','Status','UPI ID']);
-  rows.forEach(o=>add('td',[new Date(o.ts).toLocaleString(),o.name,o.room,o.phone,o.itemsText,o.total,o.status,o.utr||'']));
-  const per={};rows.forEach(o=>(o.items||[]).forEach(x=>per[x.n]=(per[x.n]||0)+x.q));
-  const paid=rows.filter(o=>o.status!=='Awaiting payment').reduce((a,o)=>a+o.total,0);
-  $('adminSum').textContent=rows.length+' orders · ₹'+paid+' marked paid · '+(Object.entries(per).map(([k,v])=>k+': '+v).join(' · ')||'no items yet');
 }
 (async()=>{
   if(!(window.claude&&claude.use))return;
@@ -433,11 +416,18 @@ function renderAdmin(){
     const user=await claude.use('user');
     if(db&&user&&user.isOwner()){
       $('admin').hidden=false;
-      db.collection('orders').onSnapshot(sn=>{rows=sn.docs.map(d=>d.data()).sort((a,b)=>b.ts-a.ts);renderAdmin();});
-      $('exportBtn').addEventListener('click',async()=>{
-        const dl=await claude.use('downloads');
-        if(dl)try{await dl.save({filename:'orders.csv',data:csv()});}catch(_){}
+      db.collection('orders').onSnapshot(sn=>{
+        ids=sn.docs.map(d=>d.id);rows=sn.docs.map(d=>d.data()).sort((a,b)=>b.ts-a.ts);
+        const per={};rows.forEach(o=>(o.items||[]).forEach(x=>per[x.n]=(per[x.n]||0)+x.q));
+        $('adminSum').textContent=rows.length+' orders · ₹'+rows.filter(o=>o.status!=='Awaiting payment').reduce((a,o)=>a+o.total,0)+' marked paid · '+Object.entries(per).map(([k,v])=>k+': '+v).join(' · ');
       });
+      $('resetBtn').addEventListener('click',async()=>{
+        const b=$('resetBtn');
+        if(!armed){armed=true;b.textContent='Tap again to delete ALL orders';setTimeout(()=>{armed=false;b.textContent='Reset orders';},5000);return;}
+        armed=false;b.textContent='Reset orders';
+        try{await Promise.all(ids.map(id=>db.collection('orders').doc(id).delete()));}catch(_){b.textContent='Reset failed';}
+      });
+      $('exportBtn').addEventListener('click',async()=>{const dl=await claude.use('downloads');if(dl)try{await dl.save({filename:'orders.csv',data:csv()});}catch(_){}});
     }
   }catch(_){}
 })();
