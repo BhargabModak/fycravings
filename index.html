@@ -336,6 +336,7 @@ document.getElementById('bg').style.backgroundImage = 'url(' + document.getEleme
 // ===== UPI payment =====
 const UPI = { pa: "9729993078@pthdfc", pn: "Ms RAJWANT KAUR", note: "Midnight Cravings" };
 const $ = id => document.getElementById(id);
+const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/i.test(navigator.platform));
 
 function upiQuery(){
@@ -351,22 +352,25 @@ function refresh(){
   $('payAmt').textContent = a >= 1 ? '₹' + a : 'the amount';
 }
 function say(t){ $('payStatus').textContent = t; }
-async function copyId(){
-  try { await navigator.clipboard.writeText(UPI.pa); return true; }
-  catch(_){
-    try{
-      const t=document.createElement('textarea');t.value=UPI.pa;t.style.position='fixed';t.style.opacity='0';
-      document.body.appendChild(t);t.select();const ok=document.execCommand('copy');t.remove();return ok;
-    }catch(__){ return false; }
-  }
+function copyIdSync(){
+  try{ if (navigator.clipboard) navigator.clipboard.writeText(UPI.pa).catch(()=>{}); }catch(_){}
+  try{
+    const t=document.createElement('textarea');t.value=UPI.pa;t.setAttribute('readonly','');
+    t.style.cssText='position:fixed;top:0;left:0;opacity:0';
+    document.body.appendChild(t);t.select();t.setSelectionRange(0,99);
+    const ok=document.execCommand('copy');t.remove();return ok;
+  }catch(_){ return false; }
 }
-async function payWithId(scheme){
+function payWithId(scheme){
   const a = parseFloat($('amt').value);
   if (!(a >= 1)) { say('Enter your order amount first.'); return; }
-  const ok = await copyId();
-  if (!isMobile){ say('Open this page on your phone to pay. UPI ID' + (ok ? ' copied: ' : ': ') + UPI.pa); return; }
-  say('Opening your UPI app to pay ₹' + a + ' to ' + UPI.pa + '. If it asks for an ID, paste the copied one.');
-  setTimeout(() => { window.location.href = scheme + '?' + upiQuery(); }, 300);
+  copyIdSync();
+  if (!isMobile){ say('Open this page on your phone to pay. UPI ID: ' + UPI.pa); return; }
+  say('Opening your UPI app to pay ₹' + a + '…');
+  window.location.href = scheme + '?' + upiQuery();   // runs straight from the tap so the phone allows it
+  setTimeout(() => {
+    if (document.visibilityState === 'visible') say('App did not open? UPI ID ' + UPI.pa + ' is copied. Open your UPI app, choose Pay to UPI ID, paste it and pay ₹' + a + '.');
+  }, 2500);
 }
 
 $('payeeName').textContent = UPI.pn.replace(/\s+/g,' ');
@@ -376,7 +380,7 @@ $('who').addEventListener('input', refresh);
 document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => { $('amt').value = c.dataset.amt; refresh(); }));
 
 $('payBtn').addEventListener('click', () => { if (orderId) payWithId('upi://pay'); });
-[['gpay','tez://upi/pay'],['phonepe','phonepe://pay'],['paytm','paytmmp://pay']].forEach(([id,u]) => $(id).addEventListener('click', e => { e.preventDefault(); if (orderId) payWithId(u); }));
+[['gpay',isIOS?'gpay://upi/pay':'tez://upi/pay'],['phonepe','phonepe://pay'],['paytm','paytmmp://pay']].forEach(([id,u]) => $(id).addEventListener('click', e => { e.preventDefault(); if (orderId) payWithId(u); }));
 
 $('copyUpi').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(UPI.pa); say('UPI ID copied.'); }
