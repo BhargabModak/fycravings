@@ -316,6 +316,7 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
         <label class="field"><span>Room no. / hostel</span><input id="oRoom" maxlength="40" placeholder="e.g. Room 214"></label>
         <label class="field"><span>Phone number</span><input id="oPhone" type="tel" inputmode="numeric" maxlength="10" autocomplete="tel"></label>
         <button type="button" class="btn primary full" id="placeBtn">Place order</button>
+        <button type="button" class="btn full" id="clearCartBtn" style="margin-top:10px">🔄 Refresh cart</button>
         <p class="status" id="orderStatus" role="status" aria-live="polite"></p>
       </div>
     </div>
@@ -602,6 +603,20 @@ async function placeOrderDoc(orderRef,payload,items){
     await orderRef.set(payload);                   // counters unavailable (e.g. database rules not updated): still take the order
   }
 }
+
+// ===== Refresh cart: clears everything the customer entered and their current order on this device =====
+function clearCart(){
+  if(orderId&&!confirm('Clear your cart and current order from this page?\n\nIf you already placed or paid for an order, please call 9239048437 so we know about it.'))return;
+  qtys.forEach(q=>{q.value='0';});
+  $('oName').value='';$('oRoom').value='';$('oPhone').value='';
+  orderId=null;orderAmt=0;orderTs=0;payTapped=false;
+  resetShot();$('shot').value='';
+  $('amt').value='';$('who').value='';
+  try{localStorage.removeItem(SKEY);}catch(_){}
+  calc();refresh();renderStock();applyHours();
+  if(!isClosedNow())osay('Cart cleared. Start a fresh order.');
+}
+$('clearCartBtn').addEventListener('click',clearCart);
 
 // ===== Closed hours: no orders from 1:00 AM until 6:00 AM (India time, whatever the visitor's phone clock says) =====
 const CLOSE_HOUR=1,OPEN_HOUR=6;
