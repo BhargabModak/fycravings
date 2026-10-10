@@ -525,7 +525,7 @@ async function dec(priv,e){
   const k=await crypto.subtle.importKey('raw',raw,'AES-GCM',false,['decrypt']);
   return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:b64d(e.iv)},k,b64d(e.ct))));
 }
-const MENU=[{id:"pasta",n:"Red Sauce Pasta",p:80},{id:"maggi",n:"Masala Fried Maggi",p:45},{id:"soda",n:"Masala Soda",p:20},{id:"rice",n:"Fried Rice",p:85},{id:"coffee",n:"Cold Coffee (Brew, no milk)",p:30},{id:"chicken",n:"Spicy Chicken (250 gm)",p:110},{id:"kurkure",n:"Kurkure Chat Masala",p:70}];
+const MENU=[{id:"maggi",n:"Masala Fried Maggi",p:45},{id:"soda",n:"Masala Soda",p:20},{id:"rice",n:"Fried Rice",p:85},{id:"coffee",n:"Cold Coffee (Brew, no milk)",p:30},{id:"chicken",n:"Spicy Chicken (250 gm)",p:110},{id:"kurkure",n:"Kurkure Chat Masala",p:70}];
 let db=null,orderId=null,orderAmt=0,orderTs=0,payTapped=false,priv=null,rows=[],ids=[];const qtys=[],leftEls=[],rowEls=[];
 MENU.forEach(m=>{
   const r=document.createElement('div');r.className='menurow';
