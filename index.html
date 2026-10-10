@@ -303,10 +303,8 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
           <button type="button" class="chip" data-amt="20">₹20</button>
           <button type="button" class="chip" data-amt="30">₹30</button>
           <button type="button" class="chip" data-amt="45">₹45</button>
-          <button type="button" class="chip" data-amt="65">₹65</button>
           <button type="button" class="chip" data-amt="80">₹80</button>
           <button type="button" class="chip" data-amt="85">₹85</button>
-          <button type="button" class="chip" data-amt="100">₹100</button>
           <button type="button" class="chip" data-amt="110">₹110</button>
         </div>
         <label class="field"><span>Your name &amp; room no.</span>
@@ -346,9 +344,23 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
         <p class="note" id="adminSum"></p>
         <div class="cta" style="justify-content:flex-start;margin-top:12px;align-items:center;gap:10px">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="selAll" style="width:20px;height:20px"> Select all</label>
+          <button type="button" class="btn small" id="paySel">Confirm selected (paid)</button>
+          <button type="button" class="btn small" id="unpaySel">Undo paid</button>
           <button type="button" class="btn small" id="cancelSel">Cancel selected orders</button>
           <span class="note" id="selCount" style="margin:0"></span>
         </div>
+        <div id="waQueue" hidden style="margin-top:12px;display:grid;gap:8px"></div>
+        <details id="manualBox" style="margin-top:12px">
+          <summary style="cursor:pointer;color:var(--amber)">Add an order manually (if an order did not reach the list)</summary>
+          <div style="margin-top:10px">
+            <label class="field"><span>Customer name</span><input id="mName" autocomplete="off"></label>
+            <label class="field"><span>Room no.</span><input id="mRoom" autocomplete="off"></label>
+            <label class="field"><span>Phone (optional)</span><input id="mPhone" inputmode="numeric" maxlength="10" autocomplete="off"></label>
+            <div id="mRows"></div>
+            <label style="display:flex;align-items:center;gap:8px;margin:10px 0"><input type="checkbox" id="mPaid" checked style="width:20px;height:20px"> Payment already received</label>
+            <button type="button" class="btn primary small" id="mAdd">Add order</button>
+          </div>
+        </details>
         <div id="orderList" style="margin-top:14px;display:grid;gap:10px"></div>
         <div class="cta" style="justify-content:flex-start;margin-top:12px">
           <button type="button" class="btn primary small" id="exportBtn">Download Excel (.xlsx, with screenshots)</button>
@@ -458,7 +470,7 @@ async function dec(priv,e){
   const k=await crypto.subtle.importKey('raw',raw,'AES-GCM',false,['decrypt']);
   return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:b64d(e.iv)},k,b64d(e.ct))));
 }
-const MENU=[{n:"Red Sauce Pasta + Masala Soda",p:100},{n:"Red Sauce Pasta",p:80},{n:"Masala Fried Maggi",p:45},{n:"Masala Fried Maggi + Masala Soda",p:65},{n:"Masala Soda",p:20},{n:"Fried Rice",p:85},{n:"Cold Coffee (Breq, no milk)",p:30},{n:"Spicy Chicken (250 gm)",p:110}];
+const MENU=[{id:"pasta",n:"Red Sauce Pasta",p:80},{id:"maggi",n:"Masala Fried Maggi",p:45},{id:"soda",n:"Masala Soda",p:20},{id:"rice",n:"Fried Rice",p:85},{id:"coffee",n:"Cold Coffee (Breq, no milk)",p:30},{id:"chicken",n:"Spicy Chicken (250 gm)",p:110}];
 let db=null,orderId=null,orderAmt=0,orderTs=0,payTapped=false,priv=null,rows=[],ids=[];const qtys=[],leftEls=[],rowEls=[];
 MENU.forEach(m=>{
   const r=document.createElement('div');r.className='menurow';
@@ -476,10 +488,11 @@ async function save(fn){try{if(!db)return false;await fn();return true;}catch(_)
 // ===== Daily food limits (shared through the database so every customer sees the same counters) =====
 const todayStr=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
 let stockDoc=null,stockUnsub=null;
+const stockRef=()=>db.collection('orders').doc('_stock');   // lives beside the orders, so the existing database rules already allow it
 function effStock(raw){
   const limits={},remaining={};
   MENU.forEach((_,i)=>{
-    const k=String(i);
+    const k=MENU[i].id;
     const lim=raw&&raw.limits&&raw.limits[k]!=null?Math.max(0,Number(raw.limits[k])):null;
     limits[k]=lim;
     if(lim==null)remaining[k]=null;
@@ -493,14 +506,14 @@ function renderStock(){
   const st=effStock(stockDoc);
   const B=$('stockBoard');B.textContent='';
   MENU.forEach((m,i)=>{
-    const r=st.remaining[i],c=document.createElement('div');c.className='sb'+(r===0?' out':'');
+    const r=st.remaining[m.id],c=document.createElement('div');c.className='sb'+(r===0?' out':'');
     const n=document.createElement('b');n.textContent=r==null?'∞':r;
     const l=document.createElement('span');l.textContent=m.n;
     const t=document.createElement('small');t.textContent=r==null?'no limit':(r===0?'sold out':'left today');
     c.append(n,l,t);B.append(c);
   });
   MENU.forEach((m,i)=>{
-    const r=st.remaining[i],q=qtys[i];
+    const r=st.remaining[m.id],q=qtys[i];
     if(r==null){q.disabled=false;q.max=10;leftEls[i].textContent='';rowEls[i].classList.remove('off');return;}
     q.max=Math.min(10,r);
     if(r<=0){q.value=0;q.disabled=true;leftEls[i].textContent='Sold out for today';rowEls[i].classList.add('off');}
@@ -510,19 +523,20 @@ function renderStock(){
 }
 function watchStock(){
   if(stockUnsub||!db||!db.collection)return;
-  try{stockUnsub=db.collection('stock').doc('today').onSnapshot(sn=>{stockDoc=sn.exists?sn.data():null;renderStock();updateStockAdmin();},()=>{});}catch(_){}
+  try{stockUnsub=stockRef().onSnapshot(sn=>{stockDoc=sn.exists?sn.data():null;renderStock();updateStockAdmin();},()=>{});}catch(_){}
 }
 // the counters go down in the same transaction that saves the order, so two buyers can never take the last one
 async function placeOrderDoc(orderRef,payload,items){
-  const sref=db.collection('stock').doc('today');
+  const sref=stockRef();
   try{
     await db.runTransaction(async tx=>{
       const snap=await tx.get(sref);
       const st=effStock(snap.exists?snap.data():null);
       const rem={...st.remaining};
       for(const it of items){
-        const i=MENU.findIndex(m=>m.n===it.n),r=rem[i];
-        if(r!=null){if(it.q>r)throw new Error('STOCK|'+it.n+'|'+r);rem[i]=r-it.q;}
+        const dm=MENU.find(m=>m.n===it.n);if(!dm)continue;
+        const r=rem[dm.id];
+        if(r!=null){if(it.q>r)throw new Error('STOCK|'+it.n+'|'+r);rem[dm.id]=r-it.q;}
       }
       tx.set(sref,{day:todayStr(),limits:st.limits,remaining:rem});
       tx.set(orderRef,payload);
@@ -540,7 +554,7 @@ $('placeBtn').addEventListener('click',async()=>{
   if(!/^\d{10}$/.test(phone))return osay('Enter a 10-digit phone number.');
   const L=lines();
   const st0=effStock(stockDoc);
-  for(const it of L){const r=st0.remaining[MENU.findIndex(m=>m.n===it.n)];if(r!=null&&it.q>r)return osay(stockMsg(it.n,r));}
+  for(const it of L){const dm=MENU.find(m=>m.n===it.n);const r=dm?st0.remaining[dm.id]:null;if(r!=null&&it.q>r)return osay(stockMsg(it.n,r));}
   const ts=Date.now(),id='o'+ts.toString(36)+Math.random().toString(36).slice(2,6);
   let ok=false;
   try{
@@ -736,7 +750,7 @@ function buildStockAdmin(){
     const inf=document.createElement('small');inf.style.cssText='display:block;color:var(--muted);font-size:.8rem';
     w.append(l,inf);
     const q=document.createElement('input');q.type='number';q.min=0;q.step=1;q.placeholder='No limit';q.setAttribute('aria-label',m.n+' daily limit');
-    q.value=st.limits[i]==null?'':st.limits[i];
+    q.value=st.limits[m.id]==null?'':st.limits[m.id];
     sInputs.push(q);sInfos.push(inf);r.append(w,q);$('sRows').append(r);
   });
   updateStockAdmin();
@@ -744,13 +758,13 @@ function buildStockAdmin(){
 function updateStockAdmin(){
   if(!sOK)return;
   const st=effStock(stockDoc);
-  sInfos.forEach((el,i)=>{el.textContent=st.limits[i]==null?'No limit':'Left today: '+st.remaining[i]+' of '+st.limits[i];});
+  sInfos.forEach((el,i)=>{const k=MENU[i].id;el.textContent=st.limits[k]==null?'No limit':'Left today: '+st.remaining[k]+' of '+st.limits[k];});
 }
 async function writeStock(build,okMsg){
   if(!db||!db.runTransaction)return ssay('The database is not connected.');
   ssay('Saving…');
   try{
-    const sref=db.collection('stock').doc('today');
+    const sref=stockRef();
     await db.runTransaction(async tx=>{
       const snap=await tx.get(sref);
       const cur=effStock(snap.exists?snap.data():null);
@@ -758,7 +772,7 @@ async function writeStock(build,okMsg){
       tx.set(sref,{day:todayStr(),limits:out.limits,remaining:out.remaining});
     });
     ssay(okMsg);
-  }catch(_){ssay('Could not save. Check the database rules allow the "stock" collection.');}
+  }catch(e){ssay('Could not save ('+((e&&(e.code||e.message))||'error')+'). Check your internet connection and try again.');}
 }
 $('sUnlock').addEventListener('click',async()=>{
   if(await sha('mc-stock:'+$('spw').value)!==S_HASH)return ssay('Wrong password.');
@@ -770,10 +784,11 @@ $('sSave').addEventListener('click',()=>{
   writeStock(cur=>{
     const limits={},remaining={};
     vals.forEach((v,i)=>{
-      if(v===''){limits[i]=null;remaining[i]=null;return;}
+      const k=MENU[i].id;
+      if(v===''){limits[k]=null;remaining[k]=null;return;}
       const nl=Math.floor(Number(v));
-      const sold=(cur.limits[i]!=null&&cur.remaining[i]!=null)?Math.max(0,cur.limits[i]-cur.remaining[i]):0;   // keep what is already sold today
-      limits[i]=nl;remaining[i]=Math.max(0,nl-sold);
+      const sold=(cur.limits[k]!=null&&cur.remaining[k]!=null)?Math.max(0,cur.limits[k]-cur.remaining[k]):0;   // keep what is already sold today
+      limits[k]=nl;remaining[k]=Math.max(0,nl-sold);
     });
     return {limits,remaining};
   },'Limits saved for today.');
@@ -830,11 +845,11 @@ $('sLockBtn').addEventListener('click',()=>{sOK=false;$('sOpen').hidden=true;$('
 })();
 
 // ===== Keep the buyer's progress when they switch to their UPI app or another tab =====
-const SKEY='mc_state_v1';
+const SKEY='mc_state_v2';
 function saveState(){
   try{
     localStorage.setItem(SKEY,JSON.stringify({
-      name:$('oName').value,room:$('oRoom').value,phone:$('oPhone').value,q:qtys.map(x=>x.value),
+      name:$('oName').value,room:$('oRoom').value,phone:$('oPhone').value,q:Object.fromEntries(MENU.map((m,i)=>[m.id,qtys[i].value])),
       orderId,orderAmt,orderTs,amt:$('amt').value,who:$('who').value,utr:$('oUtr').value,
       shotData,shotInfo,paidDone:!!$('paidBtn').dataset.done
     }));
@@ -845,7 +860,7 @@ function restoreState(){
   try{st=JSON.parse(localStorage.getItem(SKEY)||'null');}catch(_){}
   if(!st)return;
   $('oName').value=st.name||'';$('oRoom').value=st.room||'';$('oPhone').value=st.phone||'';
-  (st.q||[]).forEach((v,i)=>{if(qtys[i])qtys[i].value=v;});calc();
+  MENU.forEach((m,i)=>{if(st.q&&st.q[m.id]!=null)qtys[i].value=st.q[m.id];});calc();
   $('amt').value=st.amt||'';$('who').value=st.who||'';
   if(st.orderId){
     orderId=st.orderId;orderAmt=st.orderAmt||0;orderTs=st.orderTs||0;
@@ -871,7 +886,7 @@ window.addEventListener('pagehide',saveState);
 function csv(){
   const h=['Time','Name','Room','Phone','Items','Amount','Status','Paid at','UPI txn ID','Screenshot check','Payment time in screenshot'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-  const chk=o=>o.ai?('amount seen '+(o.ai.amountOk?'ok':'no')+', success '+(o.ai.successOk?'ok':'no')+', recipient '+(o.ai.recipientOk?'ok':'not found')):'';
+  const chk=o=>o.manual?'Confirmed by owner':o.ai?('amount seen '+(o.ai.amountOk?'ok':'no')+', success '+(o.ai.successOk?'ok':'no')+', recipient '+(o.ai.recipientOk?'ok':'not found')):'';
   const ptime=o=>o.ai&&o.ai.payAt?new Date(o.ai.payAt).toLocaleString():'';
   return '\ufeff'+[h,...rows.map(o=>[new Date(o.ts).toLocaleString(),o.name,o.room,o.phone,o.itemsText,o.total,o.status,o.paidAt?new Date(o.paidAt).toLocaleString():'',o.utr,chk(o),ptime(o)])].map(r=>r.map(q).join(',')).join('\r\n');
 }
@@ -887,7 +902,7 @@ async function exportXlsx(){
     ws.columns=[{header:'Time',width:20},{header:'Name',width:18},{header:'Room',width:16},{header:'Phone',width:14},{header:'Items',width:34},{header:'Amount',width:9},{header:'Status',width:16},{header:'Paid at',width:20},{header:'UPI txn ID',width:18},{header:'Screenshot check',width:30},{header:'Payment time in screenshot',width:22},{header:'Payment screenshot',width:34}];
     ws.getRow(1).font={bold:true};
     rows.forEach((o,i)=>{
-      const chk=o.ai?('amount seen '+(o.ai.amountOk?'ok':'no')+', success '+(o.ai.successOk?'ok':'no')+', recipient '+(o.ai.recipientOk?'ok':'not found')):'';
+      const chk=o.manual?'Confirmed by owner':o.ai?('amount seen '+(o.ai.amountOk?'ok':'no')+', success '+(o.ai.successOk?'ok':'no')+', recipient '+(o.ai.recipientOk?'ok':'not found')):'';
       const r=ws.addRow([new Date(o.ts).toLocaleString(),o.name,o.room,o.phone,o.itemsText,o.total,o.status,o.paidAt?new Date(o.paidAt).toLocaleString():'',o.utr,chk,(o.ai&&o.ai.payAt?new Date(o.ai.payAt).toLocaleString():''),'']);
       r.alignment={vertical:'middle',wrapText:true};
       if(o.shot){
@@ -910,7 +925,7 @@ const sel=new Set();
 function updateSel(){
   const n=sel.size;
   $('selCount').textContent=n?n+' selected':'';
-  $('cancelSel').disabled=!n;
+  $('cancelSel').disabled=!n;$('paySel').disabled=!n;$('unpaySel').disabled=!n;
   $('selAll').checked=rows.length>0&&rows.every(o=>sel.has(o.id));
 }
 async function bulkCancel(){
@@ -920,13 +935,13 @@ async function bulkCancel(){
   vsay('Cancelling…');
   try{
     try{
-      const sref=db.collection('stock').doc('today');
+      const sref=stockRef();
       await db.runTransaction(async tx=>{
         const snap=await tx.get(sref);
         const st=effStock(snap.exists?snap.data():null),rem={...st.remaining};let touched=false;
         targets.forEach(o=>{
           if(new Date(o.ts).toDateString()!==new Date().toDateString())return;   // only today's portions go back
-          (o.items||[]).forEach(it=>{const i=MENU.findIndex(m=>m.n===it.n);if(i>=0&&rem[i]!=null&&st.limits[i]!=null){rem[i]=Math.min(st.limits[i],rem[i]+it.q);touched=true;}});
+          (o.items||[]).forEach(it=>{const dm=MENU.find(m=>m.n===it.n);if(dm&&rem[dm.id]!=null&&st.limits[dm.id]!=null){rem[dm.id]=Math.min(st.limits[dm.id],rem[dm.id]+it.q);touched=true;}});
         });
         if(touched)tx.set(sref,{day:todayStr(),limits:st.limits,remaining:rem});
         targets.forEach(o=>tx.delete(db.collection('orders').doc(o.id)));
@@ -939,11 +954,34 @@ async function bulkCancel(){
   }catch(_){ vsay('Could not cancel the selected orders. Check your connection and try again.'); }
   updateSel();
 }
-async function render(sn){
+// ===== WhatsApp: message 9239048437 when orders are confirmed =====
+const WA_NUMBER='919239048437';
+function waText(list){
+  const head=list.length>1?'✅ '+list.length+' orders confirmed':'✅ Order confirmed';
+  const body=list.map((o,i)=>(list.length>1?(i+1)+') ':'')+(o.name||'Customer')+' · '+(o.room||'—')+' · '+(o.phone||'no phone')+'\n'+(o.itemsText||'')+' — ₹'+(o.total||0)).join('\n\n');
+  return head+'\n\n'+body+'\n\n— Midnight Cravings';
+}
+function waLink(list,label,cls){
+  const a=document.createElement('a');
+  a.href='https://wa.me/'+WA_NUMBER+'?text='+encodeURIComponent(waText(list));   // opens WhatsApp with the message ready to send
+  a.target='_blank';a.rel='noopener';a.textContent=label;a.className=cls||'btn small';
+  a.addEventListener('click',e=>e.stopPropagation());return a;
+}
+function showWaQueue(list){
+  const Q=$('waQueue');Q.textContent='';
+  if(!list.length){Q.hidden=true;return;}
+  const h=document.createElement('div');h.className='note';h.style.margin='0';
+  h.textContent='Confirmed. Tap the button to send the WhatsApp message to 9239048437 (WhatsApp opens with it ready, you just press Send):';
+  const a=waLink(list,'💬 Send WhatsApp: '+(list.length>1?list.length+' orders':'order')+' confirmed','btn primary small');
+  a.addEventListener('click',()=>setTimeout(()=>{Q.textContent='';Q.hidden=true;},400));
+  Q.append(h,a);Q.hidden=false;
+}
+async function render(sn0){
   const seq=++renderSeq;
+  const sn={docs:sn0.docs.filter(d=>d.id!=='_stock')};
   const next=(await Promise.all(sn.docs.map(async d=>{
     const x=d.data();try{const o=await dec(priv,x.enc);const pd=x.paid?await dec(priv,x.paid):null;
-      return {...o,id:d.id,ts:x.ts,status:pd?'Paid':'Awaiting payment',utr:pd?pd.utr:'',paidAt:pd?pd.paidAt:null,shot:pd?pd.shot:null,ai:pd?pd.ai:null};}catch(_){return null;}
+      return {...o,id:d.id,ts:x.ts,status:pd?'Paid':'Awaiting payment',utr:pd?pd.utr:'',paidAt:pd?pd.paidAt:null,shot:pd?pd.shot:null,ai:pd?pd.ai:null,manual:!!(pd&&pd.manual)};}catch(_){return null;}
   }))).filter(Boolean).sort((a,b)=>b.ts-a.ts);
   if(seq!==renderSeq||!priv)return;           // a newer snapshot arrived, or the page was locked
   rows=next;ids=sn.docs.map(d=>d.id);
@@ -957,9 +995,10 @@ async function render(sn){
     cb.addEventListener('change',()=>{cb.checked?sel.add(o.id):sel.delete(o.id);d.style.borderColor=edge(cb.checked);updateSel();});
     const box=document.createElement('div');box.style.flex='1';
     const t=document.createElement('strong');t.textContent=(o.name||'')+' · '+(o.room||'')+' · ₹'+(o.total||0);
-    const m=document.createElement('div');m.textContent=new Date(o.ts).toLocaleString()+' · '+(o.phone||'')+' · '+o.status+(o.utr?' · UTR '+o.utr:'');
+    const m=document.createElement('div');m.textContent=new Date(o.ts).toLocaleString()+' · '+(o.phone||'')+' · '+o.status+(o.manual?' (confirmed by owner)':'')+(o.utr?' · UTR '+o.utr:'');
     const i=document.createElement('div');i.textContent=o.itemsText||'';
     box.append(t,m,i);
+    if(o.status==='Paid'){const wl=waLink([o],'💬 WhatsApp: order confirmed','btn small');wl.style.marginTop='8px';wl.style.display='inline-block';box.append(wl);}
     if(o.ai){
       const c=document.createElement('div');c.style.opacity='.8';
       c.textContent='Screenshot check: amount seen '+(o.ai.amountOk?'✓':'✗')+' · success '+(o.ai.successOk?'✓':'✗')+' · recipient '+(o.ai.recipientOk?'✓':'not found')+' · time '+(o.ai.timeOk?'✓':'—')+(o.ai.payAt?' ('+new Date(o.ai.payAt).toLocaleString()+')':'');
@@ -985,6 +1024,50 @@ $('selAll').addEventListener('change',e=>{
   updateSel();
 });
 $('cancelSel').addEventListener('click',bulkCancel);
+async function bulkPaid(on){
+  const targets=rows.filter(o=>sel.has(o.id)&&(on?o.status!=='Paid':o.status==='Paid'));
+  if(!targets.length)return vsay(on?'Tick at least one order that is still awaiting payment.':'Tick at least one paid order.');
+  if(!confirm((on?'Mark ':'Undo the paid status of ')+targets.length+' selected order'+(targets.length>1?'s':'')+(on?' as paid?':'?')))return;
+  vsay('Saving…');
+  try{
+    await Promise.all(targets.map(async o=>db.collection('orders').doc(o.id).update({paid:on?await enc({utr:'',paidAt:Date.now(),shot:null,ai:null,manual:true}):null})));
+    targets.forEach(o=>sel.delete(o.id));
+    vsay(targets.length+' order'+(targets.length>1?'s':'')+(on?' confirmed (marked as paid).':' set back to awaiting payment.'));
+    if(on)showWaQueue(targets);
+  }catch(_){vsay('Could not save. Check your connection and try again.');}
+  updateSel();
+}
+$('paySel').addEventListener('click',()=>bulkPaid(true));
+$('unpaySel').addEventListener('click',()=>bulkPaid(false));
+const mQty=[];
+MENU.forEach(m=>{
+  const r=document.createElement('div');r.className='menurow';
+  const l=document.createElement('span');l.textContent=m.n+' – ₹'+m.p;
+  const q=document.createElement('input');q.type='number';q.min=0;q.max=50;q.value=0;q.setAttribute('aria-label',m.n+' quantity');
+  mQty.push(q);r.append(l,q);$('mRows').append(r);
+});
+$('mAdd').addEventListener('click',async()=>{
+  if(!priv||!db)return;
+  const name=$('mName').value.trim(),room=$('mRoom').value.trim(),phone=$('mPhone').value.trim();
+  const L=MENU.map((m,i)=>({n:m.n,p:m.p,q:Math.max(0,Math.min(50,parseInt(mQty[i].value)||0))})).filter(x=>x.q>0);
+  if(!L.length)return vsay('Pick at least one dish.');
+  if(!name||!room)return vsay('Enter the customer name and room.');
+  const t=L.reduce((a,x)=>a+x.p*x.q,0),ts=Date.now(),id='o'+ts.toString(36)+Math.random().toString(36).slice(2,6);
+  vsay('Adding…');
+  try{
+    const payload={ts,enc:await enc({name,room,phone,items:L,itemsText:L.map(x=>x.n+' x'+x.q).join(', '),total:t})};
+    if($('mPaid').checked)payload.paid=await enc({utr:'',paidAt:ts,shot:null,ai:null,manual:true});
+    await placeOrderDoc(db.collection('orders').doc(id),payload,L);
+    $('mName').value='';$('mRoom').value='';$('mPhone').value='';mQty.forEach(q=>{q.value=0;});
+    vsay('Order for '+name+' (₹'+t+') added'+($('mPaid').checked?' and confirmed.':'.'));
+    if($('mPaid').checked)showWaQueue([{name,room,phone,itemsText:L.map(x=>x.n+' x'+x.q).join(', '),total:t}]);
+  }catch(e){
+    const m=String(e&&e.message);
+    if(m.startsWith('STOCK|')){const [,n,r]=m.split('|');vsay(stockMsg(n,Number(r))+' (Raise the dish limit in the "Daily food limits" section first.)');}
+    else vsay('Could not add the order. Check your connection and try again.');
+  }
+});
+
 async function load(){
   if(unsub){unsub();unsub=null;}
   await new Promise((res,rej)=>{
@@ -1001,7 +1084,7 @@ $('unlockBtn').addEventListener('click',async()=>{
   try{await load();}catch(_){if(unsub){unsub();unsub=null;}priv=null;return vsay('Could not load orders. Check the database rules.');}
   $('pw').value='';$('lock').hidden=true;$('open').hidden=false;vsay('');
 });
-$('lockBtn').addEventListener('click',()=>{if(unsub){unsub();unsub=null;}priv=null;rows=[];ids=[];sel.clear();renderSeq++;$('orderList').textContent='';$('adminSum').textContent='';$('selCount').textContent='';$('selAll').checked=false;$('open').hidden=true;$('lock').hidden=false;vsay('');});
+$('lockBtn').addEventListener('click',()=>{if(unsub){unsub();unsub=null;}priv=null;rows=[];ids=[];sel.clear();renderSeq++;$('waQueue').textContent='';$('waQueue').hidden=true;$('orderList').textContent='';$('adminSum').textContent='';$('selCount').textContent='';$('selAll').checked=false;$('open').hidden=true;$('lock').hidden=false;vsay('');});
 $('exportBtn').addEventListener('click',()=>{if(priv)exportXlsx();});
 $('csvBtn').addEventListener('click',()=>{if(priv)saveBlob(new Blob([csv()],{type:'text/csv'}),'orders.csv');});
 let armed=false;
