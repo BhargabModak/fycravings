@@ -310,6 +310,7 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
       <div class="card">
         <p class="note" style="margin:0 0 8px">Left today</p>
         <div id="stockBoard" class="sboard"></div>
+        <p class="note" style="margin:6px 0 10px;font-size:.8rem">The counts go down once the kitchen confirms payment.</p>
         <div id="menuRows"></div>
         <p class="qramt" id="orderTotal">Total: ₹0</p>
         <label class="field"><span>Your name</span><input id="oName" maxlength="40" autocomplete="name"></label>
@@ -351,15 +352,7 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
       <div class="card">
         <label class="field"><span>Amount (₹)</span>
           <input id="amt" type="number" inputmode="decimal" min="1" step="1" placeholder="e.g. 65" autocomplete="off"></label>
-        <div class="chips" role="group" aria-label="Quick amounts">
-          <button type="button" class="chip" data-amt="20">₹20</button>
-          <button type="button" class="chip" data-amt="30">₹30</button>
-          <button type="button" class="chip" data-amt="45">₹45</button>
-          <button type="button" class="chip" data-amt="70">₹70</button>
-          <button type="button" class="chip" data-amt="80">₹80</button>
-          <button type="button" class="chip" data-amt="85">₹85</button>
-          <button type="button" class="chip" data-amt="110">₹110</button>
-        </div>
+        <div class="chips" id="chips" role="group" aria-label="Quick amounts"></div>
         <label class="field"><span>Your name &amp; room no.</span>
           <input id="who" type="text" maxlength="40" placeholder="e.g. Riya – Room 214" autocomplete="name"></label>
         <button type="button" class="btn primary full" id="copyUpiBtn">Copy UPI ID</button>
@@ -401,7 +394,7 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
         <div class="cta" style="justify-content:flex-start;margin-top:12px;align-items:center;gap:10px">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="selAll" style="width:20px;height:20px"> Select all</label>
           <button type="button" class="btn small" id="paySel">Confirm selected (paid)</button>
-          <button type="button" class="btn small" id="unpaySel">Undo paid</button>
+          <button type="button" class="btn small" id="unpaySel">Undo paid / confirmation</button>
           <button type="button" class="btn small" id="cancelSel">Cancel selected orders</button>
           <span class="note" id="selCount" style="margin:0"></span>
         </div>
@@ -433,16 +426,17 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
   <div class="wrap">
     <div class="card">
       <h2>Daily food limits</h2>
-      <p class="note">For the kitchen owner only. Enter the password to set how many of each dish can be ordered today.</p>
+      <p class="note">For the kitchen owner only. Enter the password to change the menu, the prices and how many of each dish can be sold today.</p>
       <div id="sLock">
         <label class="field"><span>Password</span><input id="spw" type="password" autocomplete="off"></label>
-        <button type="button" class="btn primary" id="sUnlock">Edit limits</button>
+        <button type="button" class="btn primary" id="sUnlock">Edit menu &amp; limits</button>
       </div>
       <div id="sOpen" hidden>
-        <p class="note">Set a number for each dish. Leave it empty for no limit. The counter drops with every order, and a dish at 0 can no longer be ordered. Limits repeat every day.</p>
+        <p class="note">Change a dish name or price, set its daily limit (empty = no limit), remove a dish with ✕, or add a new one. Tap <b>Save menu &amp; limits</b> to apply. A dish's "left" counter drops only when you confirm the payment of an order (Order list → Confirm selected), and a dish at 0 can no longer be ordered. Limits repeat every day; a new day starts at 6:00 AM.</p>
         <div id="sRows"></div>
         <div class="cta" style="justify-content:flex-start;margin-top:12px">
-          <button type="button" class="btn primary small" id="sSave">Save limits</button>
+          <button type="button" class="btn primary small" id="sSave">Save menu &amp; limits</button>
+          <button type="button" class="btn small" id="sAdd">+ Add dish</button>
           <button type="button" class="btn small" id="sNewDay">Reset today's counters</button>
           <button type="button" class="btn small" id="sLockBtn">Lock</button>
         </div>
@@ -526,37 +520,84 @@ async function dec(priv,e){
   const k=await crypto.subtle.importKey('raw',raw,'AES-GCM',false,['decrypt']);
   return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:b64d(e.iv)},k,b64d(e.ct))));
 }
-const MENU=[{id:"maggi",n:"Masala Fried Maggi",p:45},{id:"soda",n:"Masala Soda",p:20},{id:"rice",n:"Fried Rice",p:85},{id:"coffee",n:"Cold Coffee (Brew, no milk)",p:30},{id:"chicken",n:"Spicy Chicken (250 gm)",p:110},{id:"kurkure",n:"Kurkure Chat Masala",p:70}];
-let db=null,orderId=null,orderAmt=0,orderTs=0,payTapped=false,priv=null,rows=[],ids=[];const qtys=[],leftEls=[],rowEls=[];
-MENU.forEach(m=>{
-  const r=document.createElement('div');r.className='menurow';
-  const l=document.createElement('span');l.textContent=m.n+' – ₹'+m.p;
-  const q=document.createElement('input');q.type='number';q.min=0;q.max=10;q.value=0;q.setAttribute('aria-label',m.n+' quantity');
-  q.addEventListener('input',calc);qtys.push(q);const lf=document.createElement('small');lf.style.cssText='display:block;color:var(--muted);font-size:.8rem';leftEls.push(lf);rowEls.push(r);const w=document.createElement('div');w.append(l,lf);r.append(w,q);$('menuRows').append(r);
-});
-const lines=()=>MENU.map((m,i)=>({n:m.n,p:m.p,q:Math.max(0,Math.min(10,parseInt(qtys[i].value)||0))})).filter(x=>x.q>0);
+const DEFAULT_MENU=[{id:"maggi",n:"Masala Fried Maggi",p:45},{id:"soda",n:"Masala Soda",p:20},{id:"rice",n:"Fried Rice",p:85},{id:"coffee",n:"Cold Coffee (Brew, no milk)",p:30},{id:"chicken",n:"Spicy Chicken (250 gm)",p:110},{id:"kurkure",n:"Kurkure Chat Masala",p:70}];
+let MENU=DEFAULT_MENU.map(x=>({...x}));   // the owner can change this from "Daily food limits"; the saved menu is shared through the database
+let db=null,orderId=null,orderAmt=0,orderTs=0,payTapped=false,priv=null,rows=[],ids=[],placing=false;
+const qtys=[],leftEls=[],rowEls=[],mQty=[],menuIds=[],mIds=[],cartQ={},mCartQ={};
+// keeps only valid dishes: unique id, a name and a whole-rupee price of 1 or more
+function cleanMenu(list){
+  const out=[],seen=new Set();
+  (Array.isArray(list)?list:[]).slice(0,40).forEach(x=>{
+    if(!x||typeof x.id!=='string'||!/^[A-Za-z0-9_-]{1,40}$/.test(x.id)||seen.has(x.id))return;
+    const n=String(x.n==null?'':x.n).trim().slice(0,60),pr=Math.round(Number(x.p));
+    if(!n||!Number.isFinite(pr)||pr<1||pr>100000)return;
+    seen.add(x.id);out.push({id:x.id,n,p:pr});
+  });
+  return out;
+}
+function buildChips(){
+  const C=$('chips');if(!C)return;C.textContent='';
+  [...new Set(MENU.map(m=>m.p))].sort((a,b)=>a-b).forEach(v=>{
+    const b=document.createElement('button');b.type='button';b.className='chip';b.textContent='₹'+v;
+    b.addEventListener('click',()=>{$('amt').value=v;refresh();});C.append(b);
+  });
+}
+// draws the customer's menu, the owner's "add order" menu and the quick-amount chips from MENU (keeps what was already typed)
+function buildMenus(){
+  menuIds.forEach((id,i)=>{if(qtys[i])cartQ[id]=qtys[i].value;});
+  mIds.forEach((id,i)=>{if(mQty[i])mCartQ[id]=mQty[i].value;});
+  qtys.length=leftEls.length=rowEls.length=mQty.length=menuIds.length=mIds.length=0;
+  $('menuRows').textContent='';$('mRows').textContent='';
+  MENU.forEach(m=>{
+    const r=document.createElement('div');r.className='menurow';
+    const l=document.createElement('span');l.textContent=m.n+' – ₹'+m.p;
+    const q=document.createElement('input');q.type='number';q.min=0;q.max=10;q.value=cartQ[m.id]!=null?cartQ[m.id]:0;q.setAttribute('aria-label',m.n+' quantity');
+    q.addEventListener('input',calc);qtys.push(q);menuIds.push(m.id);
+    const lf=document.createElement('small');lf.style.cssText='display:block;color:var(--muted);font-size:.8rem';leftEls.push(lf);rowEls.push(r);
+    const w=document.createElement('div');w.append(l,lf);r.append(w,q);$('menuRows').append(r);
+    const r2=document.createElement('div');r2.className='menurow';
+    const l2=document.createElement('span');l2.textContent=m.n+' – ₹'+m.p;
+    const q2=document.createElement('input');q2.type='number';q2.min=0;q2.max=50;q2.value=mCartQ[m.id]!=null?mCartQ[m.id]:0;q2.setAttribute('aria-label',m.n+' quantity');
+    mQty.push(q2);mIds.push(m.id);r2.append(l2,q2);$('mRows').append(r2);
+  });
+  buildChips();calc();
+}
+const lines=()=>MENU.map((m,i)=>({id:m.id,n:m.n,p:m.p,q:Math.max(0,Math.min(10,parseInt(qtys[i].value)||0))})).filter(x=>x.q>0);
 const total=()=>lines().reduce((a,x)=>a+x.p*x.q,0);
+buildMenus();
 function calc(){$('orderTotal').textContent='Total: ₹'+total();}
 const osay=t=>{$('orderStatus').textContent=t;};
 const vsay=t=>{$('vaultStatus').textContent=t;};
 async function save(fn){try{if(!db)return false;await fn();return true;}catch(_){return false;}}
 
-// ===== Daily food limits (shared through the database so every customer sees the same counters) =====
-const todayStr=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
+// ===== Daily food limits & menu (shared through the database so every customer sees the same counters) =====
+// A "day" runs from 6:00 AM to 6:00 AM India time, so a late-night shift never resets in the middle of service.
+const bizDay=t=>new Date((t==null?Date.now():t)-30*60000).toISOString().slice(0,10);
 let stockDoc=null,stockUnsub=null;
 const stockRef=()=>db.collection('orders').doc('_stock');   // lives beside the orders, so the existing database rules already allow it
-function effStock(raw){
-  const limits={},remaining={};
-  MENU.forEach((_,i)=>{
-    const k=MENU[i].id;
-    const lim=raw&&raw.limits&&raw.limits[k]!=null?Math.max(0,Number(raw.limits[k])):null;
-    limits[k]=lim;
-    if(lim==null)remaining[k]=null;
-    else if(raw.day===todayStr()&&raw.remaining&&raw.remaining[k]!=null)remaining[k]=Math.max(0,Number(raw.remaining[k]));
-    else remaining[k]=lim;                         // a new day starts again from the daily limit
+const menuFrom=raw=>{const m=raw&&Array.isArray(raw.menu)?cleanMenu(raw.menu):[];return m.length?m:DEFAULT_MENU.map(x=>({...x}));};
+// The counters count only orders whose payment the owner has CONFIRMED ("sold"). Waiting or unconfirmed orders do not take a portion off the board.
+function effStock(raw,menu){
+  menu=menu||MENU;
+  const limits={},sold={},remaining={},same=!!raw&&raw.day===bizDay();
+  menu.forEach(m=>{
+    const k=m.id,lim=raw&&raw.limits&&raw.limits[k]!=null?Math.max(0,Number(raw.limits[k])):null;
+    let sd=0;
+    if(same){
+      if(raw.sold&&raw.sold[k]!=null)sd=Math.max(0,Number(raw.sold[k])||0);
+      else if(lim!=null&&raw.remaining&&raw.remaining[k]!=null)sd=Math.max(0,lim-Number(raw.remaining[k]));   // older saved format
+    }
+    limits[k]=lim;sold[k]=sd;remaining[k]=lim==null?null:Math.max(0,lim-sd);
   });
-  return {limits,remaining};
+  return {menu,limits,sold,remaining};
 }
+const findDish=(it,menu)=>menu.find(m=>it.id&&m.id===it.id)||menu.find(m=>m.n===it.n);
+function addSold(sold,items,sign,menu){
+  const out={...sold};
+  (items||[]).forEach(it=>{const dm=findDish(it,menu);if(dm)out[dm.id]=Math.max(0,(out[dm.id]||0)+sign*(Number(it.q)||0));});
+  return out;
+}
+const pruneSold=(sold,menu)=>Object.fromEntries(menu.map(m=>[m.id,sold&&sold[m.id]>0?sold[m.id]:0]));
 const stockMsg=(n,r)=>r<=0?'Sorry, '+n+' just sold out. Please remove it from your order.':'Only '+r+' of '+n+' left. Please reduce the quantity.';
 function renderStock(){
   const st=effStock(stockDoc);
@@ -569,7 +610,7 @@ function renderStock(){
     c.append(n,l,t);B.append(c);
   });
   MENU.forEach((m,i)=>{
-    const r=st.remaining[m.id],q=qtys[i];
+    const r=st.remaining[m.id],q=qtys[i];if(!q)return;
     if(r==null){q.disabled=false;q.max=10;leftEls[i].textContent='';rowEls[i].classList.remove('off');return;}
     q.max=Math.min(10,r);
     if(r<=0){q.value=0;q.disabled=true;leftEls[i].textContent='Sold out for today';rowEls[i].classList.add('off');}
@@ -578,31 +619,18 @@ function renderStock(){
   if(isClosedNow())qtys.forEach(q=>{q.disabled=true;});   // stock refreshes must not re-open the form during closed hours
   calc();
 }
+// when the owner saves a new menu, every open page picks it up live
+function syncMenu(raw){
+  const m=raw&&Array.isArray(raw.menu)?cleanMenu(raw.menu):[];
+  if(!m.length||JSON.stringify(m)===JSON.stringify(MENU))return;
+  MENU=m;buildMenus();
+}
 function watchStock(){
   if(stockUnsub||!db||!db.collection)return;
-  try{stockUnsub=stockRef().onSnapshot(sn=>{stockDoc=sn.exists?sn.data():null;renderStock();updateStockAdmin();},()=>{});}catch(_){}
+  try{stockUnsub=stockRef().onSnapshot(sn=>{stockDoc=sn.exists?sn.data():null;syncMenu(stockDoc);renderStock();updateStockAdmin();},()=>{});}catch(_){}
 }
-// the counters go down in the same transaction that saves the order, so two buyers can never take the last one
-async function placeOrderDoc(orderRef,payload,items){
-  const sref=stockRef();
-  try{
-    await db.runTransaction(async tx=>{
-      const snap=await tx.get(sref);
-      const st=effStock(snap.exists?snap.data():null);
-      const rem={...st.remaining};
-      for(const it of items){
-        const dm=MENU.find(m=>m.n===it.n);if(!dm)continue;
-        const r=rem[dm.id];
-        if(r!=null){if(it.q>r)throw new Error('STOCK|'+it.n+'|'+r);rem[dm.id]=r-it.q;}
-      }
-      tx.set(sref,{day:todayStr(),limits:st.limits,remaining:rem});
-      tx.set(orderRef,payload);
-    });
-  }catch(e){
-    if(String(e&&e.message).startsWith('STOCK|'))throw e;
-    await orderRef.set(payload);                   // counters unavailable (e.g. database rules not updated): still take the order
-  }
-}
+// placing an order only saves the order; the counters move when the owner confirms the payment
+async function placeOrderDoc(orderRef,payload){await orderRef.set(payload);}
 
 // ===== Refresh cart: clears everything the customer entered and their current order on this device =====
 function clearCart(){
@@ -637,22 +665,24 @@ function applyHours(){
 }
 $('placeBtn').addEventListener('click',async()=>{
   if(isClosedNow()){applyHours();return;}
+  if(placing)return;
+  if(orderId)return osay('You already placed an order. Pay below, or tap Refresh cart to start a new one.');
   const name=$('oName').value.trim(),room=$('oRoom').value.trim(),phone=$('oPhone').value.trim(),t=total();
   if(!t)return osay('Pick at least one item.');
   if(!name||!room)return osay('Enter your name and room.');
   if(!/^\d{10}$/.test(phone))return osay('Enter a 10-digit phone number.');
   const L=lines();
   const st0=effStock(stockDoc);
-  for(const it of L){const dm=MENU.find(m=>m.n===it.n);const r=dm?st0.remaining[dm.id]:null;if(r!=null&&it.q>r)return osay(stockMsg(it.n,r));}
+  for(const it of L){const dm=MENU.find(m=>m.id===it.id);const r=dm?st0.remaining[dm.id]:null;if(r!=null&&it.q>r)return osay(stockMsg(it.n,r));}
   const ts=Date.now(),id='o'+ts.toString(36)+Math.random().toString(36).slice(2,6);
-  let ok=false;
+  let ok=false;placing=true;
   try{
     if(db){await placeOrderDoc(db.collection('orders').doc(id),{ts,enc:await enc({name,room,phone,items:L,itemsText:L.map(x=>x.n+' x'+x.q).join(', '),total:t})},L);ok=true;}
   }catch(e){
     const m=String(e&&e.message);
     if(m.startsWith('STOCK|')){const [,n,r]=m.split('|');renderStock();return osay(stockMsg(n,Number(r)));}
   }
-  orderId=id;orderAmt=t;orderTs=ts;resetShot();$('shot').value='';
+  placing=false;orderId=id;orderAmt=t;orderTs=ts;resetShot();$('shot').value='';
   $('amt').value=t;$('who').value=name+' – '+room;refresh();
   osay(ok?'Order saved. Now pay ₹'+t+' below, upload the payment screenshot, then tap "I\'ve paid".':'Could not save online. Pay below and call 9239048437 with your order.');
   saveState();
@@ -825,68 +855,89 @@ $('paidBtn').addEventListener('click',async()=>{
 });
 
 
-// ===== Owner section: edit the daily limits =====
+// ===== Owner section: edit the menu, the prices and the daily limits =====
 const S_HASH="a21d2ee52cc93ff7b27dd07509ffbf73746e5249508796fa0574f6f01e31ab62";
-let sOK=false;const sInputs=[],sInfos=[];
+let sOK=false,sDraft=[];const sEls=[];
 const ssay=t=>{$('sStatus').textContent=t;};
 async function sha(txt){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(txt));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');}
-function buildStockAdmin(){
-  $('sRows').textContent='';sInputs.length=0;sInfos.length=0;
+const newDishId=()=>'d'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+function stockDraftFromDoc(){
   const st=effStock(stockDoc);
-  MENU.forEach((m,i)=>{
-    const r=document.createElement('div');r.className='menurow';
-    const w=document.createElement('div');const l=document.createElement('span');l.textContent=m.n;
-    const inf=document.createElement('small');inf.style.cssText='display:block;color:var(--muted);font-size:.8rem';
-    w.append(l,inf);
-    const q=document.createElement('input');q.type='number';q.min=0;q.step=1;q.placeholder='No limit';q.setAttribute('aria-label',m.n+' daily limit');
-    q.value=st.limits[m.id]==null?'':st.limits[m.id];
-    sInputs.push(q);sInfos.push(inf);r.append(w,q);$('sRows').append(r);
+  return MENU.map(m=>({id:m.id,n:m.n,p:String(m.p),limit:st.limits[m.id]==null?'':String(st.limits[m.id]),isNew:false}));
+}
+function readStockDraft(){sDraft=sEls.map(e=>({id:e.id,n:e.name.value,p:e.price.value,limit:e.limit.value,isNew:e.isNew}));}
+function buildStockAdmin(){
+  const R=$('sRows');R.textContent='';sEls.length=0;
+  const inp='padding:10px;border-radius:12px;border:1px solid var(--edge);background:rgba(255,255,255,.07);color:var(--ink);font:inherit;width:100%;min-width:0';
+  const head=document.createElement('div');head.style.cssText='display:grid;grid-template-columns:1fr 78px 84px 36px;gap:8px;font-size:.78rem;color:var(--muted);margin-bottom:4px';
+  ['Dish name','Price ₹','Daily limit',''].forEach(t=>{const x=document.createElement('span');x.textContent=t;head.append(x);});R.append(head);
+  sDraft.forEach(d=>{
+    const row=document.createElement('div');row.style.cssText='padding:8px 0;border-bottom:1px solid rgba(255,255,255,.1)';
+    const g=document.createElement('div');g.style.cssText='display:grid;grid-template-columns:1fr 78px 84px 36px;gap:8px;align-items:center';
+    const name=document.createElement('input');name.type='text';name.maxLength=60;name.value=d.n;name.placeholder='Dish name';name.style.cssText=inp;name.setAttribute('aria-label','Dish name');
+    const price=document.createElement('input');price.type='number';price.min=1;price.step=1;price.inputMode='numeric';price.value=d.p;price.placeholder='₹';price.style.cssText=inp;price.setAttribute('aria-label','Price in rupees');
+    const limit=document.createElement('input');limit.type='number';limit.min=0;limit.step=1;limit.inputMode='numeric';limit.value=d.limit;limit.placeholder='No limit';limit.style.cssText=inp;limit.setAttribute('aria-label','Daily limit');
+    const rm=document.createElement('button');rm.type='button';rm.textContent='✕';rm.className='btn small';rm.style.cssText='padding:8px 0;min-width:0';rm.setAttribute('aria-label','Remove this dish');
+    const info=document.createElement('small');info.style.cssText='display:block;color:var(--muted);font-size:.8rem;margin-top:4px';
+    const e={id:d.id,name,price,limit,info,isNew:d.isNew};
+    rm.addEventListener('click',()=>{readStockDraft();sDraft=sDraft.filter(x=>x.id!==e.id);buildStockAdmin();ssay('Dish removed from the list. Tap "Save menu & limits" to apply.');});
+    sEls.push(e);g.append(name,price,limit,rm);row.append(g,info);R.append(row);
   });
   updateStockAdmin();
 }
 function updateStockAdmin(){
   if(!sOK)return;
   const st=effStock(stockDoc);
-  sInfos.forEach((el,i)=>{const k=MENU[i].id;el.textContent=st.limits[k]==null?'No limit':'Left today: '+st.remaining[k]+' of '+st.limits[k];});
+  sEls.forEach(e=>{
+    if(e.isNew||!(e.id in st.limits)){e.info.textContent='New dish – not saved yet';return;}
+    const k=e.id;
+    e.info.textContent=(st.limits[k]==null?'No limit':'Left today: '+st.remaining[k]+' of '+st.limits[k])+' · confirmed today: '+st.sold[k];
+  });
 }
 async function writeStock(build,okMsg){
-  if(!db||!db.runTransaction)return ssay('The database is not connected.');
+  if(!db||!db.runTransaction){ssay('The database is not connected.');return false;}
   ssay('Saving…');
   try{
     const sref=stockRef();
     await db.runTransaction(async tx=>{
-      const snap=await tx.get(sref);
-      const cur=effStock(snap.exists?snap.data():null);
-      const out=build(cur);
-      tx.set(sref,{day:todayStr(),limits:out.limits,remaining:out.remaining});
+      const snap=await tx.get(sref),raw=snap.exists?snap.data():null,menu=menuFrom(raw),cur=effStock(raw,menu),out=build(cur)||{};
+      const m=out.menu||cur.menu;
+      tx.set(sref,{day:bizDay(),menu:m,limits:out.limits||cur.limits,sold:pruneSold(out.sold||cur.sold,m)});
     });
-    ssay(okMsg);
-  }catch(e){ssay('Could not save ('+((e&&(e.code||e.message))||'error')+'). Check your internet connection and try again.');}
+    ssay(okMsg);return true;
+  }catch(e){ssay('Could not save ('+((e&&(e.code||e.message))||'error')+'). Check your internet connection and the database rules, then try again.');return false;}
 }
 $('sUnlock').addEventListener('click',async()=>{
   if(await sha('mc-stock:'+$('spw').value)!==S_HASH)return ssay('Wrong password.');
-  sOK=true;$('spw').value='';$('sLock').hidden=true;$('sOpen').hidden=false;ssay('');buildStockAdmin();
+  sOK=true;$('spw').value='';$('sLock').hidden=true;$('sOpen').hidden=false;ssay('');sDraft=stockDraftFromDoc();buildStockAdmin();
 });
-$('sSave').addEventListener('click',()=>{
-  const vals=sInputs.map(q=>q.value.trim());
-  if(vals.some(v=>v!==''&&!(Number.isFinite(Number(v))&&Number(v)>=0)))return ssay('Limits must be whole numbers, 0 or more.');
-  writeStock(cur=>{
-    const limits={},remaining={};
-    vals.forEach((v,i)=>{
-      const k=MENU[i].id;
-      if(v===''){limits[k]=null;remaining[k]=null;return;}
-      const nl=Math.floor(Number(v));
-      const sold=(cur.limits[k]!=null&&cur.remaining[k]!=null)?Math.max(0,cur.limits[k]-cur.remaining[k]):0;   // keep what is already sold today
-      limits[k]=nl;remaining[k]=Math.max(0,nl-sold);
-    });
-    return {limits,remaining};
-  },'Limits saved for today.');
+$('sAdd').addEventListener('click',()=>{
+  readStockDraft();
+  if(sDraft.length>=40)return ssay('The menu can have up to 40 dishes.');
+  sDraft.push({id:newDishId(),n:'',p:'',limit:'',isNew:true});buildStockAdmin();ssay('');
+  const last=sEls[sEls.length-1];if(last)last.name.focus();
+});
+$('sSave').addEventListener('click',async()=>{
+  readStockDraft();
+  const menu=[],limits={},seen=new Set();
+  for(const d of sDraft){
+    const n=d.n.trim(),pr=Number(d.p),lim=String(d.limit).trim();
+    if(!n)return ssay('Every dish needs a name (or remove the empty row with ✕).');
+    if(seen.has(n.toLowerCase()))return ssay('Two dishes are named "'+n+'". Each name must be different.');
+    seen.add(n.toLowerCase());
+    if(!Number.isInteger(pr)||pr<1)return ssay('The price of '+n+' must be a whole number of rupees, 1 or more.');
+    if(lim!==''&&!(Number.isInteger(Number(lim))&&Number(lim)>=0))return ssay('The limit for '+n+' must be a whole number, 0 or more (or empty for no limit).');
+    menu.push({id:d.id,n:n.slice(0,60),p:pr});limits[d.id]=lim===''?null:Number(lim);
+  }
+  if(!menu.length)return ssay('The menu needs at least one dish.');
+  const ok=await writeStock(cur=>({menu,limits,sold:cur.sold}),'Menu, prices and limits saved. Customers see the change right away.');
+  if(ok){readStockDraft();sDraft.forEach(d=>{d.isNew=false;});buildStockAdmin();}
 });
 $('sNewDay').addEventListener('click',()=>{
   if(!confirm("Reset today's counters back to the full daily limits?"))return;
-  writeStock(cur=>({limits:cur.limits,remaining:{...cur.limits}}),"Today's counters were reset.");
+  writeStock(()=>({sold:{}}),"Today's counters were reset.");
 });
-$('sLockBtn').addEventListener('click',()=>{sOK=false;$('sOpen').hidden=true;$('sLock').hidden=false;$('sRows').textContent='';ssay('');});
+$('sLockBtn').addEventListener('click',()=>{sOK=false;sDraft=[];sEls.length=0;$('sOpen').hidden=true;$('sLock').hidden=false;$('sRows').textContent='';ssay('');});
 
 // ===== Tutorial video: starts when the page opens, 2x speed, soft music =====
 (function(){
@@ -948,6 +999,8 @@ function restoreState(){
   let st=null;
   try{st=JSON.parse(localStorage.getItem(SKEY)||'null');}catch(_){}
   if(!st)return;
+  if(st.orderTs&&bizDay(st.orderTs)!==bizDay()){st.orderId=null;st.shotData=null;st.paidDone=false;st.amt='';st.who='';}   // an order from a previous day is not carried over
+  Object.assign(cartQ,st.q||{});
   $('oName').value=st.name||'';$('oRoom').value=st.room||'';$('oPhone').value=st.phone||'';
   MENU.forEach((m,i)=>{if(st.q&&st.q[m.id]!=null)qtys[i].value=st.q[m.id];});calc();
   $('amt').value=st.amt||'';$('who').value=st.who||'';
@@ -1045,13 +1098,13 @@ async function bulkCancel(){
     try{
       const sref=stockRef();
       await db.runTransaction(async tx=>{
-        const snap=await tx.get(sref);
-        const st=effStock(snap.exists?snap.data():null),rem={...st.remaining};let touched=false;
+        const snap=await tx.get(sref),raw=snap.exists?snap.data():null,menu=menuFrom(raw),cur=effStock(raw,menu);
+        let sold={...cur.sold},touched=false;
         targets.forEach(o=>{
-          if(new Date(o.ts).toDateString()!==new Date().toDateString())return;   // only today's portions go back
-          (o.items||[]).forEach(it=>{const dm=MENU.find(m=>m.n===it.n);if(dm&&rem[dm.id]!=null&&st.limits[dm.id]!=null){rem[dm.id]=Math.min(st.limits[dm.id],rem[dm.id]+it.q);touched=true;}});
+          if(!o.confirmed||bizDay(o.confirmedAt||o.paidAt||0)!==bizDay())return;   // only confirmed portions from today go back
+          sold=addSold(sold,o.items,-1,menu);touched=true;
         });
-        if(touched)tx.set(sref,{day:todayStr(),limits:st.limits,remaining:rem});
+        if(touched)tx.set(sref,{day:bizDay(),menu:cur.menu,limits:cur.limits,sold:pruneSold(sold,menu)});
         targets.forEach(o=>tx.delete(db.collection('orders').doc(o.id)));
       });
     }catch(_){
@@ -1067,7 +1120,8 @@ async function render(sn0){
   const sn={docs:sn0.docs.filter(d=>d.id!=='_stock')};
   const next=(await Promise.all(sn.docs.map(async d=>{
     const x=d.data();try{const o=await dec(priv,x.enc);const pd=x.paid?await dec(priv,x.paid):null;
-      return {...o,id:d.id,ts:x.ts,status:pd?'Paid':'Awaiting payment',utr:pd?pd.utr:'',paidAt:pd?pd.paidAt:null,shot:pd?pd.shot:null,ai:pd?pd.ai:null,manual:!!(pd&&pd.manual)};}catch(_){return null;}
+      const cf=!!(pd&&pd.manual);
+      return {...o,id:d.id,ts:x.ts,status:cf?'Confirmed':(pd?'Paid – awaiting confirmation':'Awaiting payment'),confirmed:cf,confirmedAt:pd?(pd.confirmedAt||pd.paidAt||null):null,utr:pd?pd.utr:'',paidAt:pd?pd.paidAt:null,shot:pd?pd.shot:null,ai:pd?pd.ai:null,manual:cf};}catch(_){return null;}
   }))).filter(Boolean).sort((a,b)=>b.ts-a.ts);
   if(seq!==renderSeq||!priv)return;           // a newer snapshot arrived, or the page was locked
   rows=next;ids=sn.docs.map(d=>d.id);
@@ -1081,7 +1135,7 @@ async function render(sn0){
     cb.addEventListener('change',()=>{cb.checked?sel.add(o.id):sel.delete(o.id);d.style.borderColor=edge(cb.checked);updateSel();});
     const box=document.createElement('div');box.style.flex='1';
     const t=document.createElement('strong');t.textContent=(o.name||'')+' · '+(o.room||'')+' · ₹'+(o.total||0);
-    const m=document.createElement('div');m.textContent=new Date(o.ts).toLocaleString()+' · '+(o.phone||'')+' · '+o.status+(o.manual?' (confirmed by owner)':'')+(o.utr?' · UTR '+o.utr:'');
+    const m=document.createElement('div');m.textContent=new Date(o.ts).toLocaleString()+' · '+(o.phone||'')+' · '+o.status+(o.utr?' · UTR '+o.utr:'');
     const i=document.createElement('div');i.textContent=o.itemsText||'';
     box.append(t,m,i);
     if(o.ai){
@@ -1099,8 +1153,8 @@ async function render(sn0){
     }
     L.appendChild(d);
   });
-  const per={};rows.forEach(o=>(o.items||[]).forEach(x=>per[x.n]=(per[x.n]||0)+x.q));
-  $('adminSum').textContent=rows.length+' orders · ₹'+rows.filter(o=>o.status==='Paid').reduce((a,o)=>a+o.total,0)+' marked paid · '+(Object.entries(per).map(([k,v])=>k+': '+v).join(' · ')||'no items yet');
+  const per={};rows.filter(o=>o.confirmed).forEach(o=>(o.items||[]).forEach(x=>per[x.n]=(per[x.n]||0)+x.q));
+  $('adminSum').textContent=rows.length+' orders · ₹'+rows.filter(o=>o.confirmed).reduce((a,o)=>a+o.total,0)+' confirmed · '+rows.filter(o=>o.status==='Paid – awaiting confirmation').length+' paid, waiting for your confirmation · '+(Object.entries(per).map(([k,v])=>k+': '+v).join(' · ')||'no confirmed items yet');
   updateSel();
 }
 $('selAll').addEventListener('change',e=>{
@@ -1110,45 +1164,74 @@ $('selAll').addEventListener('change',e=>{
 });
 $('cancelSel').addEventListener('click',bulkCancel);
 async function bulkPaid(on){
-  const targets=rows.filter(o=>sel.has(o.id)&&(on?o.status!=='Paid':o.status==='Paid'));
-  if(!targets.length)return vsay(on?'Tick at least one order that is still awaiting payment.':'Tick at least one paid order.');
-  if(!confirm((on?'Mark ':'Undo the paid status of ')+targets.length+' selected order'+(targets.length>1?'s':'')+(on?' as paid?':'?')))return;
+  const targets=rows.filter(o=>sel.has(o.id)&&(on?!o.confirmed:o.status!=='Awaiting payment'));
+  if(!targets.length)return vsay(on?'Tick at least one order that is not confirmed yet.':'Tick at least one paid or confirmed order.');
+  const n=targets.length,pl=n>1?'s':'';
+  if(!confirm(on?('Confirm the payment of '+n+' selected order'+pl+'?\n\nTheir dishes will now come off today\'s "left" counters.'):('Undo the payment / confirmation of '+n+' selected order'+pl+'?\n\nConfirmed dishes go back onto today\'s counters.')))return;
   vsay('Saving…');
+  const over=[];
   try{
-    await Promise.all(targets.map(async o=>db.collection('orders').doc(o.id).update({paid:on?await enc({utr:'',paidAt:Date.now(),shot:null,ai:null,manual:true}):null})));
+    await db.runTransaction(async tx=>{
+      over.length=0;
+      const sref=stockRef(),oRefs=targets.map(o=>db.collection('orders').doc(o.id));
+      const sSnap=await tx.get(sref),oSnaps=await Promise.all(oRefs.map(r=>tx.get(r)));
+      const raw=sSnap.exists?sSnap.data():null,menu=menuFrom(raw),cur=effStock(raw,menu);
+      let sold={...cur.sold},touched=false;const writes=[];
+      for(let i=0;i<targets.length;i++){
+        const o=targets[i],snap=oSnaps[i];
+        if(!snap.exists)continue;
+        const x=snap.data(),pd=x.paid?await dec(priv,x.paid):null,wasCf=!!(pd&&pd.manual);
+        if(on){
+          if(wasCf)continue;                       // already confirmed (e.g. from another phone)
+          const now=Date.now();
+          writes.push([oRefs[i],{paid:await enc({utr:pd?pd.utr:'',paidAt:(pd&&pd.paidAt)||now,shot:pd?pd.shot:null,ai:pd?pd.ai:null,manual:true,confirmedAt:now})}]);   // keeps the customer's screenshot and UTR
+          sold=addSold(sold,o.items,1,menu);touched=true;
+        }else{
+          let np=null;
+          if(wasCf){
+            if(pd.shot||pd.ai||pd.utr)np=await enc({utr:pd.utr||'',paidAt:pd.paidAt||null,shot:pd.shot||null,ai:pd.ai||null,manual:false});   // back to "paid – awaiting confirmation"
+            if(bizDay(pd.confirmedAt||pd.paidAt||0)===bizDay()){sold=addSold(sold,o.items,-1,menu);touched=true;}
+          }
+          writes.push([oRefs[i],{paid:np}]);
+        }
+      }
+      writes.forEach(([r,d])=>tx.update(r,d));
+      if(touched)tx.set(sref,{day:bizDay(),menu:cur.menu,limits:cur.limits,sold:pruneSold(sold,menu)});
+      if(on)menu.forEach(m=>{const l=cur.limits[m.id];if(l!=null&&(sold[m.id]||0)>l)over.push(m.n);});
+    });
     targets.forEach(o=>sel.delete(o.id));
-    vsay(targets.length+' order'+(targets.length>1?'s':'')+(on?' confirmed (marked as paid).':' set back to awaiting payment.'));
-  }catch(_){vsay('Could not save. Check your connection and try again.');}
+    vsay(n+' order'+pl+(on?' confirmed. Today\'s counters were updated.':' updated.')+(over.length?' Note: '+over.join(', ')+' is now over today\'s limit.':''));
+  }catch(_){vsay('Could not save. Check your connection and the database rules, then try again.');}
   updateSel();
 }
 $('paySel').addEventListener('click',()=>bulkPaid(true));
 $('unpaySel').addEventListener('click',()=>bulkPaid(false));
-const mQty=[];
-MENU.forEach(m=>{
-  const r=document.createElement('div');r.className='menurow';
-  const l=document.createElement('span');l.textContent=m.n+' – ₹'+m.p;
-  const q=document.createElement('input');q.type='number';q.min=0;q.max=50;q.value=0;q.setAttribute('aria-label',m.n+' quantity');
-  mQty.push(q);r.append(l,q);$('mRows').append(r);
-});
 $('mAdd').addEventListener('click',async()=>{
   if(!priv||!db)return;
   const name=$('mName').value.trim(),room=$('mRoom').value.trim(),phone=$('mPhone').value.trim();
-  const L=MENU.map((m,i)=>({n:m.n,p:m.p,q:Math.max(0,Math.min(50,parseInt(mQty[i].value)||0))})).filter(x=>x.q>0);
+  const L=MENU.map((m,i)=>({id:m.id,n:m.n,p:m.p,q:Math.max(0,Math.min(50,parseInt(mQty[i].value)||0))})).filter(x=>x.q>0);
   if(!L.length)return vsay('Pick at least one dish.');
   if(!name||!room)return vsay('Enter the customer name and room.');
   const t=L.reduce((a,x)=>a+x.p*x.q,0),ts=Date.now(),id='o'+ts.toString(36)+Math.random().toString(36).slice(2,6);
+  const confirmed=$('mPaid').checked,over=[];
   vsay('Adding…');
   try{
     const payload={ts,enc:await enc({name,room,phone,items:L,itemsText:L.map(x=>x.n+' x'+x.q).join(', '),total:t})};
-    if($('mPaid').checked)payload.paid=await enc({utr:'',paidAt:ts,shot:null,ai:null,manual:true});
-    await placeOrderDoc(db.collection('orders').doc(id),payload,L);
-    $('mName').value='';$('mRoom').value='';$('mPhone').value='';mQty.forEach(q=>{q.value=0;});
-    vsay('Order for '+name+' (₹'+t+') added'+($('mPaid').checked?' and confirmed.':'.'));
-  }catch(e){
-    const m=String(e&&e.message);
-    if(m.startsWith('STOCK|')){const [,n,r]=m.split('|');vsay(stockMsg(n,Number(r))+' (Raise the dish limit in the "Daily food limits" section first.)');}
-    else vsay('Could not add the order. Check your connection and try again.');
-  }
+    const oref=db.collection('orders').doc(id);
+    if(confirmed){
+      payload.paid=await enc({utr:'',paidAt:ts,shot:null,ai:null,manual:true,confirmedAt:ts});
+      await db.runTransaction(async tx=>{
+        over.length=0;
+        const sref=stockRef(),snap=await tx.get(sref),raw=snap.exists?snap.data():null,menu=menuFrom(raw),cur=effStock(raw,menu);
+        const sold=addSold(cur.sold,L,1,menu);
+        menu.forEach(m=>{const l=cur.limits[m.id];if(l!=null&&(sold[m.id]||0)>l)over.push(m.n);});
+        tx.set(sref,{day:bizDay(),menu:cur.menu,limits:cur.limits,sold:pruneSold(sold,menu)});
+        tx.set(oref,payload);
+      });
+    }else await oref.set(payload);
+    $('mName').value='';$('mRoom').value='';$('mPhone').value='';mQty.forEach(q=>{q.value=0;});mIds.forEach(k=>{mCartQ[k]=0;});
+    vsay('Order for '+name+' (₹'+t+') added'+(confirmed?' and confirmed.':'.')+(over.length?' Note: '+over.join(', ')+' is now over today\'s limit.':''));
+  }catch(e){vsay('Could not add the order. Check your connection and the database rules, then try again.');}
 });
 
 async function load(){
@@ -1181,7 +1264,7 @@ $('resetBtn').addEventListener('click',async()=>{
   if(!priv)return;
   if(!armed){armed=true;b.textContent='Tap again to delete ALL orders';setTimeout(()=>{armed=false;b.textContent='Reset orders';},5000);return;}
   armed=false;b.textContent='Reset orders';
-  try{await Promise.all(ids.map(id=>db.collection('orders').doc(id).delete()));}catch(_){vsay('Reset failed.');}
+  try{await Promise.all(ids.map(id=>db.collection('orders').doc(id).delete()));await writeStock(()=>({sold:{}}),"Today's counters were reset together with the orders.");vsay('All orders deleted and today\'s counters reset.');}catch(_){vsay('Reset failed.');}
 });
 // ===== Firebase Firestore (for GitHub Pages) =====
 const FIREBASE_CONFIG={
