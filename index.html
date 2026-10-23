@@ -663,6 +663,72 @@ function applyHours(){
   if(c)osay(CLOSED_MSG);
   else{if($('orderStatus').textContent===CLOSED_MSG)osay('');renderStock();}   // reopen: stock rules decide which dishes are enabled
 }
+
+// ===== Telegram Order Notifications =====
+const TG_CONFIG = {
+  token: "8833052852:AAGqSsghZLTRs0dF5JXL5nXTzpBkQJelp2s",
+  chatId: "7174358687"
+};
+
+function tgEscape(str) {
+  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function notifyOwnerTelegram(order) {
+  try {
+    const itemsList = (order.items || []).map(x => '• ' + tgEscape(x.n) + ' <b>x' + x.q + '</b> (₹' + (x.p * x.q) + ')').join('\n');
+    const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
+    const text = 
+'🔔 <b>NEW ORDER - MIDNIGHT CRAVINGS</b>\n' +
+'━━━━━━━━━━━━━━━━━━━━\n' +
+'👤 <b>Customer:</b> ' + tgEscape(order.name) + '\n' +
+'🚪 <b>Room / Hostel:</b> ' + tgEscape(order.room) + '\n' +
+'📞 <b>Phone:</b> <a href="tel:' + tgEscape(order.phone) + '">' + tgEscape(order.phone) + '</a>\n' +
+'💰 <b>Total Bill:</b> ₹' + order.total + '\n' +
+'━━━━━━━━━━━━━━━━━━━━\n' +
+'🍽️ <b>Items:</b>\n' +
+itemsList + '\n' +
+'━━━━━━━━━━━━━━━━━━━━\n' +
+'⏰ <b>Time:</b> ' + timeStr;
+
+    fetch('https://api.telegram.org/bot' + TG_CONFIG.token + '/sendMessage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: TG_CONFIG.chatId,
+        text: text,
+        parse_mode: 'HTML'
+      }),
+      keepalive: true
+    }).catch(() => {});
+  } catch (_) {}
+}
+
+function notifyPaymentTelegram(name, room, utr, totalAmt) {
+  try {
+    const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
+    const text = 
+'💵 <b>PAYMENT CONFIRMED (PAID TAPPED)</b>\n' +
+'━━━━━━━━━━━━━━━━━━━━\n' +
+'👤 <b>Customer:</b> ' + tgEscape(name) + ' (' + tgEscape(room) + ')\n' +
+'💰 <b>Amount:</b> ₹' + totalAmt + '\n' +
+'💳 <b>UTR / Txn ID:</b> ' + tgEscape(utr || 'Screenshot uploaded (see Vault)') + '\n' +
+'━━━━━━━━━━━━━━━━━━━━\n' +
+'⏰ <b>Time:</b> ' + timeStr;
+
+    fetch('https://api.telegram.org/bot' + TG_CONFIG.token + '/sendMessage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: TG_CONFIG.chatId,
+        text: text,
+        parse_mode: 'HTML'
+      }),
+      keepalive: true
+    }).catch(() => {});
+  } catch (_) {}
+}
+
 $('placeBtn').addEventListener('click',async()=>{
   if(isClosedNow()){applyHours();return;}
   if(placing)return;
@@ -686,6 +752,7 @@ $('placeBtn').addEventListener('click',async()=>{
   $('amt').value=t;$('who').value=name+' – '+room;refresh();
   osay(ok?'Order saved. Now pay ₹'+t+' below, upload the payment screenshot, then tap "I\'ve paid".':'Could not save online. Pay below and call 9239048437 with your order.');
   saveState();
+  notifyOwnerTelegram({ name, room, phone, items: L, total: t });
   $('pay').scrollIntoView();
 });
 // ===== Payment screenshot check (runs in the buyer's browser) =====
@@ -850,7 +917,7 @@ $('paidBtn').addEventListener('click',async()=>{
   if(!shotData)return shotSay('Upload your payment screenshot first.');
   btn.disabled=true;btn.textContent='Saving…';
   const ok=await save(async()=>db.collection('orders').doc(orderId).update({paid:await enc({utr:$('oUtr').value.trim(),paidAt:Date.now(),shot:shotData,ai:shotInfo})}));
-  if(ok){btn.dataset.done='1';btn.textContent='Paid ✓';$('oUtr').disabled=true;say('Thanks! Your payment is recorded as Paid. Tap Call now to confirm your order with us.');$('callBox').hidden=false;saveState();}
+  if(ok){btn.dataset.done='1';btn.textContent='Paid ✓';$('oUtr').disabled=true;say('Thanks! Your payment is recorded as Paid. Tap Call now to confirm your order with us.');$('callBox').hidden=false;saveState();notifyPaymentTelegram($('oName').value.trim(), $('oRoom').value.trim(), $('oUtr').value.trim(), orderAmt);}
   else{btn.disabled=false;btn.textContent="I've paid";say('Could not save. Please call 9239048437.');}
 });
 
@@ -1354,3 +1421,4 @@ refresh();
 </script>
 </body>
 </html>
+
