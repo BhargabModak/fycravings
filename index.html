@@ -522,7 +522,7 @@ async function dec(priv,e){
 }
 const DEFAULT_MENU=[{id:"maggi",n:"Masala Fried Maggi",p:45},{id:"soda",n:"Masala Soda",p:20},{id:"rice",n:"Fried Rice",p:85},{id:"coffee",n:"Cold Coffee (Brew, no milk)",p:30},{id:"chicken",n:"Spicy Chicken (250 gm)",p:110},{id:"kurkure",n:"Kurkure Chat Masala",p:70}];
 let MENU=DEFAULT_MENU.map(x=>({...x}));   // the owner can change this from "Daily food limits"; the saved menu is shared through the database
-let db=null,orderId=null,orderAmt=0,orderTs=0,payTapped=false,priv=null,rows=[],ids=[],placing=false;
+let db=null,orderId=null,orderAmt=0,orderTs=0,orderItems=[],payTapped=false,priv=null,rows=[],ids=[],placing=false;
 const qtys=[],leftEls=[],rowEls=[],mQty=[],menuIds=[],mIds=[],cartQ={},mCartQ={};
 // keeps only valid dishes: unique id, a name and a whole-rupee price of 1 or more
 function cleanMenu(list){
@@ -637,7 +637,7 @@ function clearCart(){
   if(orderId&&!confirm('Clear your cart and current order from this page?\n\nIf you already placed or paid for an order, please call 9239048437 so we know about it.'))return;
   qtys.forEach(q=>{q.value='0';});
   $('oName').value='';$('oRoom').value='';$('oPhone').value='';
-  orderId=null;orderAmt=0;orderTs=0;payTapped=false;
+  orderId=null;orderAmt=0;orderTs=0;orderItems=[];payTapped=false;
   resetShot();$('shot').value='';
   $('amt').value='';$('who').value='';
   try{localStorage.removeItem(SKEY);}catch(_){}
@@ -679,42 +679,19 @@ function notifyOwnerTelegram(order) {
     const itemsList = (order.items || []).map(x => '• ' + tgEscape(x.n) + ' <b>x' + x.q + '</b> (₹' + (x.p * x.q) + ')').join('\n');
     const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
     const text = 
-'🔔 <b>NEW ORDER - MIDNIGHT CRAVINGS</b>\n' +
+'✅ <b>PAYMENT CONFIRMED - NEW ORDER!</b>\n' +
 '━━━━━━━━━━━━━━━━━━━━\n' +
 '👤 <b>Customer:</b> ' + tgEscape(order.name) + '\n' +
 '🚪 <b>Room / Hostel:</b> ' + tgEscape(order.room) + '\n' +
 '📞 <b>Phone:</b> <a href="tel:' + tgEscape(order.phone) + '">' + tgEscape(order.phone) + '</a>\n' +
-'💰 <b>Total Bill:</b> ₹' + order.total + '\n' +
+'💰 <b>Total Paid:</b> ₹' + order.total + '\n' +
+(order.utr ? ('💳 <b>UTR / Txn ID:</b> ' + tgEscape(order.utr) + '\n') : '💳 <b>UTR:</b> Uploaded via Screenshot\n') +
 '━━━━━━━━━━━━━━━━━━━━\n' +
-'🍽️ <b>Items:</b>\n' +
+'🍽️ <b>Items to Cook:</b>\n' +
 itemsList + '\n' +
 '━━━━━━━━━━━━━━━━━━━━\n' +
-'⏰ <b>Time:</b> ' + timeStr;
-
-    fetch('https://api.telegram.org/bot' + TG_CONFIG.token + '/sendMessage', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: TG_CONFIG.chatId,
-        text: text,
-        parse_mode: 'HTML'
-      }),
-      keepalive: true
-    }).catch(() => {});
-  } catch (_) {}
-}
-
-function notifyPaymentTelegram(name, room, utr, totalAmt) {
-  try {
-    const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
-    const text = 
-'💵 <b>PAYMENT CONFIRMED (PAID TAPPED)</b>\n' +
-'━━━━━━━━━━━━━━━━━━━━\n' +
-'👤 <b>Customer:</b> ' + tgEscape(name) + ' (' + tgEscape(room) + ')\n' +
-'💰 <b>Amount:</b> ₹' + totalAmt + '\n' +
-'💳 <b>UTR / Txn ID:</b> ' + tgEscape(utr || 'Screenshot uploaded (see Vault)') + '\n' +
-'━━━━━━━━━━━━━━━━━━━━\n' +
-'⏰ <b>Time:</b> ' + timeStr;
+'⏰ <b>Time:</b> ' + timeStr + '\n' +
+'📍 <b>Status:</b> Payment verified & confirmed';
 
     fetch('https://api.telegram.org/bot' + TG_CONFIG.token + '/sendMessage', {
       method: 'POST',
@@ -748,11 +725,10 @@ $('placeBtn').addEventListener('click',async()=>{
     const m=String(e&&e.message);
     if(m.startsWith('STOCK|')){const [,n,r]=m.split('|');renderStock();return osay(stockMsg(n,Number(r)));}
   }
-  placing=false;orderId=id;orderAmt=t;orderTs=ts;resetShot();$('shot').value='';
+  placing=false;orderId=id;orderAmt=t;orderTs=ts;orderItems=L;resetShot();$('shot').value='';
   $('amt').value=t;$('who').value=name+' – '+room;refresh();
   osay(ok?'Order saved. Now pay ₹'+t+' below, upload the payment screenshot, then tap "I\'ve paid".':'Could not save online. Pay below and call 9239048437 with your order.');
   saveState();
-  notifyOwnerTelegram({ name, room, phone, items: L, total: t });
   $('pay').scrollIntoView();
 });
 // ===== Payment screenshot check (runs in the buyer's browser) =====
@@ -917,7 +893,11 @@ $('paidBtn').addEventListener('click',async()=>{
   if(!shotData)return shotSay('Upload your payment screenshot first.');
   btn.disabled=true;btn.textContent='Saving…';
   const ok=await save(async()=>db.collection('orders').doc(orderId).update({paid:await enc({utr:$('oUtr').value.trim(),paidAt:Date.now(),shot:shotData,ai:shotInfo})}));
-  if(ok){btn.dataset.done='1';btn.textContent='Paid ✓';$('oUtr').disabled=true;say('Thanks! Your payment is recorded as Paid. Tap Call now to confirm your order with us.');$('callBox').hidden=false;saveState();notifyPaymentTelegram($('oName').value.trim(), $('oRoom').value.trim(), $('oUtr').value.trim(), orderAmt);}
+  if(ok){
+    btn.dataset.done='1';btn.textContent='Paid ✓';$('oUtr').disabled=true;say('Thanks! Your payment is recorded as Paid. Tap Call now to confirm your order with us.');$('callBox').hidden=false;saveState();
+    const confirmedItems=(orderItems&&orderItems.length)?orderItems:lines();
+    notifyOwnerTelegram({name:$('oName').value.trim(),room:$('oRoom').value.trim(),phone:$('oPhone').value.trim(),items:confirmedItems,total:orderAmt||total(),utr:$('oUtr').value.trim()});
+  }
   else{btn.disabled=false;btn.textContent="I've paid";say('Could not save. Please call 9239048437.');}
 });
 
@@ -1057,7 +1037,7 @@ function saveState(){
   try{
     localStorage.setItem(SKEY,JSON.stringify({
       name:$('oName').value,room:$('oRoom').value,phone:$('oPhone').value,q:Object.fromEntries(MENU.map((m,i)=>[m.id,qtys[i].value])),
-      orderId,orderAmt,orderTs,amt:$('amt').value,who:$('who').value,utr:$('oUtr').value,
+      orderId,orderAmt,orderTs,orderItems,amt:$('amt').value,who:$('who').value,utr:$('oUtr').value,
       shotData,shotInfo,paidDone:!!$('paidBtn').dataset.done
     }));
   }catch(_){}
@@ -1066,13 +1046,13 @@ function restoreState(){
   let st=null;
   try{st=JSON.parse(localStorage.getItem(SKEY)||'null');}catch(_){}
   if(!st)return;
-  if(st.orderTs&&bizDay(st.orderTs)!==bizDay()){st.orderId=null;st.shotData=null;st.paidDone=false;st.amt='';st.who='';}   // an order from a previous day is not carried over
+  if(st.orderTs&&bizDay(st.orderTs)!==bizDay()){st.orderId=null;st.orderItems=[];st.shotData=null;st.paidDone=false;st.amt='';st.who='';}   // an order from a previous day is not carried over
   Object.assign(cartQ,st.q||{});
   $('oName').value=st.name||'';$('oRoom').value=st.room||'';$('oPhone').value=st.phone||'';
   MENU.forEach((m,i)=>{if(st.q&&st.q[m.id]!=null)qtys[i].value=st.q[m.id];});calc();
   $('amt').value=st.amt||'';$('who').value=st.who||'';
   if(st.orderId){
-    orderId=st.orderId;orderAmt=st.orderAmt||0;orderTs=st.orderTs||0;
+    orderId=st.orderId;orderAmt=st.orderAmt||0;orderTs=st.orderTs||0;orderItems=st.orderItems||[];
     if(st.shotData){
       shotData=st.shotData;shotInfo=st.shotInfo||null;
       $('shotPrev').src=shotData;$('shotPrev').hidden=false;
