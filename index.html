@@ -347,7 +347,7 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
 <section id="pay">
   <div class="wrap">
     <h2>Pay with UPI</h2>
-    <p class="lead">Copy the UPI ID, pay in your UPI app, then come back and tap I've paid.</p>
+    <p class="lead">Complete payment in your UPI app, then attach the screenshot below.</p>
     <div class="pay-grid">
       <div class="card">
         <label class="field"><span>Amount (₹)</span>
@@ -355,17 +355,24 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
         <div class="chips" id="chips" role="group" aria-label="Quick amounts"></div>
         <label class="field"><span>Your name &amp; room no.</span>
           <input id="who" type="text" maxlength="40" placeholder="e.g. Riya – Room 214" autocomplete="name"></label>
-        <button type="button" class="btn primary full" id="copyUpiBtn">Copy UPI ID</button>
+
+        <div style="display:flex;gap:10px;flex-direction:column;margin:14px 0 8px">
+          <a class="btn primary full" id="openUpiBtn" href="#" style="text-align:center;font-size:1.05rem;padding:14px">⚡ Open UPI App &amp; Pay</a>
+          <button type="button" class="btn full" id="copyUpiBtn">📋 Copy UPI ID</button>
+        </div>
+
         <p class="payee">Pay <b id="payAmt"></b> to <b id="payeeName"></b><br>UPI ID: <b id="payeeId"></b></p>
         <ol class="steps">
-          <li>Tap <b>Copy UPI ID</b> above.</li>
-          <li>Open your UPI app (GPay, PhonePe, Paytm or any other) and choose <b>Pay to UPI ID</b>.</li>
-          <li>Paste the UPI ID, enter the amount and pay.</li>
-          <li>Come back here and upload a screenshot of the successful payment. Once it is checked, the <b>I've paid</b> button appears.</li>
+          <li>Your UPI app (GPay, PhonePe, Paytm, FamPay) opens with the amount and UPI ID pre-filled.</li>
+          <li>Complete the payment and take a screenshot.</li>
+          <li>Switch back here and upload the screenshot below to verify and confirm your order.</li>
         </ol>
-        <label class="field"><span>Payment screenshot (required)</span><input id="shot" type="file" accept="image/*"></label>
-        <img id="shotPrev" alt="Payment screenshot preview" hidden style="max-width:100%;max-height:240px;border-radius:12px;margin-top:8px">
-        <p class="status" id="shotStatus" role="status" aria-live="polite"></p>
+
+        <div id="shotSection" style="padding-top:12px;border-top:1px solid rgba(255,255,255,.12);margin-top:12px">
+          <label class="field"><span style="font-size:1rem;color:var(--amber);font-weight:700">📸 Attach Payment Screenshot (required)</span><input id="shot" type="file" accept="image/*"></label>
+          <img id="shotPrev" alt="Payment screenshot preview" hidden style="max-width:100%;max-height:240px;border-radius:12px;margin-top:8px">
+          <p class="status" id="shotStatus" role="status" aria-live="polite"></p>
+        </div>
         <div id="paidBox" hidden>
           <label class="field"><span>UPI transaction ID (optional)</span><input id="oUtr" maxlength="30" autocomplete="off"></label>
           <button type="button" class="btn primary full" id="paidBtn">I've paid</button>
@@ -459,7 +466,7 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
 document.getElementById('bg').style.backgroundImage = 'url(' + document.getElementById('bgsrc').src + ')';
 
 // ===== UPI payment =====
-const UPI = { pa: "9729993078@pthdfc", pn: "Ms RAJWANT KAUR", note: "Midnight Cravings" };
+const UPI = { pa: "9239048437@fam", pn: "Midnight Cravings", note: "Midnight Cravings" };
 const $ = id => document.getElementById(id);
 const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/i.test(navigator.platform));
@@ -472,9 +479,16 @@ function upiQuery(){
   q += '&tn=' + encodeURIComponent(UPI.note + (who ? ' - ' + who : ''));
   return q;
 }
+function upiUri(){
+  return 'upi://pay?' + upiQuery();
+}
 function refresh(){
   const a = parseFloat($('amt').value);
   $('payAmt').textContent = a >= 1 ? '₹' + a : 'the amount';
+  if ($('openUpiBtn')) {
+    $('openUpiBtn').href = upiUri();
+    $('openUpiBtn').textContent = a >= 1 ? '⚡ Pay ₹' + a + ' in UPI App' : '⚡ Open UPI App & Pay';
+  }
 }
 function say(t){ $('payStatus').textContent = t; }
 function copyIdSync(){
@@ -727,9 +741,21 @@ $('placeBtn').addEventListener('click',async()=>{
   }
   placing=false;orderId=id;orderAmt=t;orderTs=ts;orderItems=L;resetShot();$('shot').value='';
   $('amt').value=t;$('who').value=name+' – '+room;refresh();
-  osay(ok?'Order saved. Now pay ₹'+t+' below, upload the payment screenshot, then tap "I\'ve paid".':'Could not save online. Pay below and call 9239048437 with your order.');
+  osay(ok?'Order saved! Opening your UPI app with ₹'+t+' pre-filled...':'Could not save online. Pay below and call 9239048437 with your order.');
   saveState();
-  $('pay').scrollIntoView();
+
+  // 1. Automatically launch the customer's UPI app with the exact amount & UPI ID pre-filled
+  const upiUrl = upiUri();
+  try {
+    window.location.href = upiUrl;
+  } catch(_) {}
+
+  // 2. Direct the customer smoothly to attach their payment screenshot
+  setTimeout(() => {
+    const target = $('shotSection') || $('pay');
+    target.scrollIntoView({ behavior: 'smooth' });
+    shotSay('⚡ Opening UPI app for ₹' + t + '... After paying, attach your screenshot below to confirm.');
+  }, 400);
 });
 // ===== Payment screenshot check (runs in the buyer's browser) =====
 let shotData=null,shotInfo=null,shotToken=0,tessLoading=null;
