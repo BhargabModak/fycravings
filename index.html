@@ -347,7 +347,7 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
 <section id="pay">
   <div class="wrap">
     <h2>Pay with UPI</h2>
-    <p class="lead">Complete payment in your UPI app, then attach the screenshot below.</p>
+    <p class="lead">Copy the UPI ID, pay in your UPI app, then attach your screenshot below.</p>
     <div class="pay-grid">
       <div class="card">
         <label class="field"><span>Amount (₹)</span>
@@ -356,16 +356,14 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
         <label class="field"><span>Your name &amp; room no.</span>
           <input id="who" type="text" maxlength="40" placeholder="e.g. Riya – Room 214" autocomplete="name"></label>
 
-        <div style="display:flex;gap:10px;flex-direction:column;margin:14px 0 8px">
-          <a class="btn primary full" id="openUpiBtn" href="#" style="text-align:center;font-size:1.05rem;padding:14px">⚡ Open UPI App &amp; Pay</a>
-          <button type="button" class="btn full" id="copyUpiBtn">📋 Copy UPI ID</button>
-        </div>
+        <button type="button" class="btn primary full" id="copyUpiBtn" style="font-size:1.05rem;padding:14px;margin:12px 0 8px">📋 Copy UPI ID (9239048437@fam)</button>
 
         <p class="payee">Pay <b id="payAmt"></b> to <b id="payeeName"></b><br>UPI ID: <b id="payeeId"></b></p>
         <ol class="steps">
-          <li>Your UPI app (GPay, PhonePe, Paytm, FamPay) opens with the amount and UPI ID pre-filled.</li>
-          <li>Complete the payment and take a screenshot.</li>
-          <li>Switch back here and upload the screenshot below to verify and confirm your order.</li>
+          <li>Tap <b>Copy UPI ID</b> above (copies <b>9239048437@fam</b>).</li>
+          <li>Open your UPI app (<b>GPay, PhonePe, Paytm, or FamPay</b>).</li>
+          <li>Choose <b>Pay to UPI ID</b>, paste the ID, enter <b id="stepAmt">the amount</b>, and pay.</li>
+          <li>Take a screenshot of the successful payment and upload it below.</li>
         </ol>
 
         <div id="shotSection" style="padding-top:12px;border-top:1px solid rgba(255,255,255,.12);margin-top:12px">
@@ -479,16 +477,10 @@ function upiQuery(){
   q += '&tn=' + encodeURIComponent(UPI.note + (who ? ' - ' + who : ''));
   return q;
 }
-function upiUri(){
-  return 'upi://pay?' + upiQuery();
-}
 function refresh(){
   const a = parseFloat($('amt').value);
   $('payAmt').textContent = a >= 1 ? '₹' + a : 'the amount';
-  if ($('openUpiBtn')) {
-    $('openUpiBtn').href = upiUri();
-    $('openUpiBtn').textContent = a >= 1 ? '⚡ Pay ₹' + a + ' in UPI App' : '⚡ Open UPI App & Pay';
-  }
+  if ($('stepAmt')) $('stepAmt').textContent = a >= 1 ? '₹' + a : 'the amount';
 }
 function say(t){ $('payStatus').textContent = t; }
 function copyIdSync(){
@@ -741,21 +733,11 @@ $('placeBtn').addEventListener('click',async()=>{
   }
   placing=false;orderId=id;orderAmt=t;orderTs=ts;orderItems=L;resetShot();$('shot').value='';
   $('amt').value=t;$('who').value=name+' – '+room;refresh();
-  osay(ok?'Order saved! Opening your UPI app with ₹'+t+' pre-filled...':'Could not save online. Pay below and call 9239048437 with your order.');
+  copyIdSync();
+  osay(ok?'Order saved! Now pay ₹'+t+' below, upload the payment screenshot, then tap "I\'ve paid".':'Could not save online. Pay below and call 9239048437 with your order.');
   saveState();
-
-  // 1. Automatically launch the customer's UPI app with the exact amount & UPI ID pre-filled
-  const upiUrl = upiUri();
-  try {
-    window.location.href = upiUrl;
-  } catch(_) {}
-
-  // 2. Direct the customer smoothly to attach their payment screenshot
-  setTimeout(() => {
-    const target = $('shotSection') || $('pay');
-    target.scrollIntoView({ behavior: 'smooth' });
-    shotSay('⚡ Opening UPI app for ₹' + t + '... After paying, attach your screenshot below to confirm.');
-  }, 400);
+  $('pay').scrollIntoView({ behavior: 'smooth' });
+  say('✓ UPI ID ' + UPI.pa + ' copied! Pay ₹' + t + ' in your UPI app, then attach the screenshot below.');
 });
 // ===== Payment screenshot check (runs in the buyer's browser) =====
 let shotData=null,shotInfo=null,shotToken=0,tessLoading=null;
