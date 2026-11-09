@@ -346,8 +346,8 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
 
 <section id="pay">
   <div class="wrap">
-    <h2>Pay for your order</h2>
-    <p class="lead">Pay securely with UPI (GPay, PhonePe, Paytm) or Cards via Cashfree.</p>
+    <h2>Pay with UPI</h2>
+    <p class="lead">Complete payment in your UPI app, then attach your screenshot below.</p>
     <div class="pay-grid">
       <div class="card">
         <label class="field"><span>Amount (₹)</span>
@@ -356,31 +356,33 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
         <label class="field"><span>Your name &amp; room no.</span>
           <input id="who" type="text" maxlength="40" placeholder="e.g. Riya – Room 214" autocomplete="name"></label>
 
-        <button type="button" class="btn primary full" id="cfPayBtn" style="font-size:1.15rem;padding:16px;margin:14px 0 10px;background:#6c5ce7;border-color:#6c5ce7;box-shadow:0 6px 20px rgba(108,92,231,0.4)">⚡ Pay Now with Cashfree (Auto-Verified)</button>
-        <p class="status" id="cfStatus" style="color:var(--amber);margin:4px 0" role="status" aria-live="polite"></p>
+        <div style="display:flex;gap:10px;flex-direction:column;margin:14px 0 8px">
+          <a class="btn primary full" id="openUpiBtn" href="#" style="text-align:center;font-size:1.05rem;padding:14px">⚡ Open UPI App &amp; Pay</a>
+          <button type="button" class="btn full" id="copyUpiBtn">📋 Copy UPI ID (pabanmodak1972@oksbi)</button>
+        </div>
 
-        <details style="margin-top:14px;border-top:1px solid rgba(255,255,255,.1);padding-top:10px">
-          <summary style="cursor:pointer;color:var(--muted);font-size:0.9rem">Or pay manually with UPI / Screenshot</summary>
-          <div style="margin-top:10px">
-            <button type="button" class="btn full" id="copyUpiBtn">📋 Copy UPI ID (9239049437@fam)</button>
-            <p class="payee">UPI ID: <b id="payeeId"></b></p>
-            <div id="shotSection" style="padding-top:12px;border-top:1px solid rgba(255,255,255,.12);margin-top:12px">
-              <label class="field"><span style="font-size:1rem;color:var(--amber);font-weight:700">📸 Attach Payment Screenshot</span><input id="shot" type="file" accept="image/*"></label>
-              <img id="shotPrev" alt="Payment screenshot preview" hidden style="max-width:100%;max-height:240px;border-radius:12px;margin-top:8px">
-              <p class="status" id="shotStatus" role="status" aria-live="polite"></p>
-            </div>
-            <div id="paidBox" hidden>
-              <label class="field"><span>UPI transaction ID (optional)</span><input id="oUtr" maxlength="30" autocomplete="off"></label>
-              <button type="button" class="btn primary full" id="paidBtn">I've paid</button>
-            </div>
-          </div>
-        </details>
+        <p class="payee">Pay <b id="payAmt"></b> to <b id="payeeName"></b><br>UPI ID: <b id="payeeId"></b></p>
+        <ol class="steps">
+          <li>Your UPI app (GPay, PhonePe, Paytm) opens with the amount and UPI ID pre-filled.</li>
+          <li>Complete the payment and take a screenshot.</li>
+          <li>Switch back here and upload the screenshot below to verify and confirm your order.</li>
+          <li>(If your app didn't open automatically, tap <b>Open UPI App &amp; Pay</b> above or use <b>Copy UPI ID</b>).</li>
+        </ol>
 
+        <div id="shotSection" style="padding-top:12px;border-top:1px solid rgba(255,255,255,.12);margin-top:12px">
+          <label class="field"><span style="font-size:1rem;color:var(--amber);font-weight:700">📸 Attach Payment Screenshot (required)</span><input id="shot" type="file" accept="image/*"></label>
+          <img id="shotPrev" alt="Payment screenshot preview" hidden style="max-width:100%;max-height:240px;border-radius:12px;margin-top:8px">
+          <p class="status" id="shotStatus" role="status" aria-live="polite"></p>
+        </div>
+        <div id="paidBox" hidden>
+          <label class="field"><span>UPI transaction ID (optional)</span><input id="oUtr" maxlength="30" autocomplete="off"></label>
+          <button type="button" class="btn primary full" id="paidBtn">I've paid</button>
+        </div>
         <div id="callBox" hidden style="margin-top:12px">
           <a class="btn primary full" id="callBtn" href="tel:+919239048437">📞 Call now · 9239048437</a>
         </div>
         <p class="status" id="payStatus" role="status" aria-live="polite"></p>
-        <p class="note">After paying, keep the confirmation ready and call <a href="tel:+919239048437">9239048437</a> if there is any issue.</p>
+        <p class="note">After paying, keep the payment screenshot ready and call <a href="tel:+919239048437">9239048437</a> if there is any issue.</p>
       </div>
 
     </div>
@@ -460,20 +462,23 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
 <script>
 // Blurred page background reuses the preview photo
 document.getElementById('bg').style.backgroundImage = 'url(' + document.getElementById('bgsrc').src + ')';
 
 // ===== UPI payment =====
-const UPI = { pa: "9239049437@fam", pn: "Midnight Cravings", note: "Midnight Cravings" };
+const UPI = { pa: "pabanmodak1972@oksbi", pn: "Paban Modak", note: "Midnight Cravings" };
 const $ = id => document.getElementById(id);
 const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/i.test(navigator.platform));
 
-// Omitting the amount parameter allows P2P personal UPI IDs to open directly without bank limits or merchant account requirements
 function upiQuery(){
-  return 'pa=' + UPI.pa + '&pn=' + encodeURIComponent(UPI.pn) + '&cu=INR&tn=' + encodeURIComponent(UPI.note);
+  const a = parseFloat($('amt').value);
+  const who = $('who').value.trim();
+  let q = 'pa=' + UPI.pa + '&pn=' + encodeURIComponent(UPI.pn) + '&cu=INR';
+  if (a >= 1) q += '&am=' + a.toFixed(2);
+  q += '&tn=' + encodeURIComponent(UPI.note + (who ? ' - ' + who : ''));
+  return q;
 }
 function upiUri(){
   return 'upi://pay?' + upiQuery();
@@ -485,7 +490,7 @@ function refresh(){
   if ($('stepAmt')) $('stepAmt').textContent = amtStr;
   if ($('openUpiBtn')) {
     $('openUpiBtn').href = upiUri();
-    $('openUpiBtn').textContent = a >= 1 ? '⚡ Open UPI App (Pay ₹' + a + ')' : '⚡ Open UPI App & Pay';
+    $('openUpiBtn').textContent = a >= 1 ? '⚡ Pay ₹' + a + ' in UPI App' : '⚡ Open UPI App & Pay';
   }
 }
 function say(t){ $('payStatus').textContent = t; }
@@ -509,83 +514,6 @@ $('copyUpiBtn').addEventListener('click', () => {
   const ok = copyIdSync();
   say(ok ? 'UPI ID copied: ' + UPI.pa + '. Now open your UPI app and pay to it.' : 'Copy failed. Type this UPI ID in your UPI app: ' + UPI.pa);
 });
-
-// ===== Cashfree Payment Gateway =====
-const CASHFREE_CONFIG = {
-  workerUrl: "https://fycravings.bhargabmodak2007.workers.dev", 
-  mode: "sandbox" // "sandbox" for test, "production" for live
-};
-
-async function payWithCashfree(){
-  if (!orderId || !orderAmt) {
-    say('Please place your order first above, then pay.');
-    return;
-  }
-  if (!CASHFREE_CONFIG.workerUrl) {
-    say('Please paste your Cloudflare Worker URL in CASHFREE_CONFIG to launch Cashfree.');
-    return;
-  }
-  const btn = $('cfPayBtn');
-  btn.disabled = true;
-  btn.textContent = 'Opening Cashfree…';
-  $('cfStatus').textContent = 'Loading secure payment…';
-
-  try {
-    const res = await fetch(CASHFREE_CONFIG.workerUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        orderId: orderId,
-        amount: orderAmt,
-        customerName: $('oName').value.trim() || 'Customer',
-        customerPhone: $('oPhone').value.trim() || '9999999999'
-      })
-    });
-    const data = await res.json();
-    if (!data.paymentSessionId) throw new Error(data.error || 'Could not create Cashfree session');
-
-    const cf = Cashfree({ mode: CASHFREE_CONFIG.mode });
-    cf.checkout({
-      paymentSessionId: data.paymentSessionId,
-      redirectTarget: '_modal'
-    }).then(async (result) => {
-      if (result.error) {
-        say('Payment cancelled: ' + (result.error.message || ''));
-        $('cfStatus').textContent = '';
-        btn.disabled = false;
-        btn.textContent = '⚡ Pay Now with Cashfree (Auto-Verified)';
-        return;
-      }
-      if (result.paymentDetails) {
-        btn.textContent = 'Paid ✓';
-        const utr = result.paymentDetails.paymentMessage || result.paymentDetails.paymentId || ('CF_' + Date.now());
-        await save(async()=>db.collection('orders').doc(orderId).update({
-          paid: await enc({ utr, paidAt: Date.now(), gateway: 'cashfree', details: result.paymentDetails })
-        }));
-        saveState();
-        say('Thanks! Your payment is recorded as Paid via Cashfree.');
-        $('cfStatus').textContent = '✅ Payment Verified & Confirmed!';
-        $('callBox').hidden = false;
-        const confirmedItems = (orderItems && orderItems.length) ? orderItems : lines();
-        notifyOwnerTelegram({
-          name: $('oName').value.trim(),
-          room: $('oRoom').value.trim(),
-          phone: $('oPhone').value.trim(),
-          items: confirmedItems,
-          total: orderAmt || total(),
-          utr: 'Cashfree Verified (' + utr + ')'
-        });
-      }
-    });
-  } catch(err) {
-    say('Cashfree error: ' + err.message + '. You can use manual UPI below.');
-    $('cfStatus').textContent = '';
-    btn.disabled = false;
-    btn.textContent = '⚡ Pay Now with Cashfree (Auto-Verified)';
-  }
-}
-if ($('cfPayBtn')) $('cfPayBtn').addEventListener('click', payWithCashfree);
-
 // ===== Orders =====
 const KEYS={"pub": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxTNQl24wzisDODqPf9ASn8gr9uSj5u4mUtmw6snHL2MAMhGj7MeMY14UwbwJMBuCUYqffCaXSFs+0+4AT8XZqL264YH7o9hjJ+/HTp4Pn56NpDOr+Jk2EWJgogAtsClexaFG3FwGgr65W2a53soqNmSV/+nCJrgeqLIq2LHDjd1MowuAiib+xsAmWdtZorCl1aUnoqU2ViKyeH+W8v7xviorx+gYFQEVnjTIZRpK0xsAdnO5f2o17xsGN8PXNQFCU5P0t4UoTuPdoDmO9yBT7gSysjTGOZwr9skoH4OF3LAz1Y1XgKoeAgeA37z+LvEwtNwQcRsLyKbnrbzITlx5NQIDAQAB", "salt": "JFbNL4VzmMW3gq9vcqDwng==", "iv": "73A37ZF3GHtYiXeM", "ct": "axxR6rC32eyhkfjZasC7QTvIslJOu6YVNSB5GR/XtoF81UxwYPCANGSLKHTu6pYCmOD+TV0yfQgGkkBPzuPHKk7TLnjKy5ImQiVOn5Y87OYKlgizK2WrBGy99rc4r6s5Lv1ZQ0iUniUSMSrlbU/xk9vueoTjN67Roosu0xsHkFWdCXPNaRiHLMbe4FRZuDbKDjvM7LoDfjsE2ssRC1SYaGryylSGgeq4WERSNTEx9aCTDBGEdon9yj9H8znmWZWZqO0sTaL3OGDqADNYjEhkPSznTZz+ho8mOSRCHOTYNRKFPQa9xk2EReJJNgu35ZzON0+n3Qt2Y2CnK7CjnQcLcHYsqrDxzfeyBs8h9K9tGTSodvwrh7aEdEfE3vop15FSab9HSdypMI8yeGEAFrXGG8BJixQIrixxIn1GZ8Iyv9dkRo3jayyeQdbUVdKp0bZb00qmPGnO6RnjGhX8J3wlZ830EotKMp+cftTDApRrpcViENI2McnfC1tIXJgoa01Z+lodLdHl1zDhGFgXBnCZB5jbfjiymu+LcReubx7tBYV8MJBXUuY+KVLhMumU5mAxZvpJljtN9oF5bWs9if7TdE+RemguMl7XdhpfCIeVTTsAJSW4rjv12MZ/OHUU6tAxo9FPUi7r6bFDkJt5A1CaI1O4LN/d+15xizsgzU+VcRTceOLXQ/n/SwCxppuZY2EkwJ3bnzqlapYK47ZVuBkd0fvBvymBPaOXJ+mO+twldKdDViFUjmN9EIEjsE0qKDjOPdJG6uLtHJVeADj3ri/vo1iByu2fmrjehbpQa8biITamJKZi8bB7etqHfm1kVVcKJz7StWks9ndp2hZQA93Bz/t+I2zBP8yMp9vMtn+iAIGms73EkOIS7VZJbDRVlKcON/5ydtC/e1rG9YggwNvnFysw8It+i9VpYGIZxRRKiSbq/9CugMsXRb0E4JfSLpvJlkl+Qj+rIIUpvlFQ5fROZ/THTft5OQwGw75VXYkVhRF81wEDjbV53Le1lH6XJvQcUQ8nIkX+UYCV537dK7qa6jbo+Qu/WnsnruFgZsB4uYEGrBfUcOeM4+qL1H115rF7+4IGSiLOJHxBg6ZSdUP+381MAoFpzVXck/JXFEnSD3fHX6z3G9COuju6pITjY0GU7CJsvt0lRWktA7tfS/v2MFp3LE1ugn7LVXeOz5YN9azXxf3oNYqPhLnN038w+Gfmb8ELo2acF08zSiSS8iZ05viIUnYsBzsECKYu4hSbUZPNGs+3ssy1hWtEXJ0lJ49SibMs/a/j9DKNVYizLsJoZJHQfCL7LIji38i/Leh41w2eFWELWZh86jHQ8e3tkS+GBsMI8sB+0ImGGW7akPjH8pazciKpL77cDkJO/N198XWfwRAXSpQcBx4u/0k16sNoS9+ukWa51wzuXhh9EpU9X6H+ARsOMJEFvMvjnM85ypIYUaCVjrZlN9hIBHA4ukAt2RZaVY917dKjZWn6aCKHO1YN7GtYQLRX+65neoxlSkzTwG+hhtGTs9Ie+YUtlJ0jXn+YcAe83oQxnLWgdCy8virv5RNFNHatZYwmWBK/1zoixxozLDB1M2c0l0UmrusbNYYVWvoHaFPwtsub26LzVbyP0ki8MvF6L1m8gE1JKw5IJ1I="};
 const b64d=x=>Uint8Array.from(atob(x),c=>c.charCodeAt(0));
@@ -816,11 +744,21 @@ $('placeBtn').addEventListener('click',async()=>{
   }
   placing=false;orderId=id;orderAmt=t;orderTs=ts;orderItems=L;resetShot();$('shot').value='';
   $('amt').value=t;$('who').value=name+' – '+room;refresh();
-  osay(ok?'Order saved! Opening secure payment via Cashfree…':'Could not save online. Pay below and call 9239048437 with your order.');
+  copyIdSync();
+  osay(ok?'Order saved! Opening your UPI app with ₹'+t+' pre-filled...':'Could not save online. Pay below and call 9239048437 with your order.');
   saveState();
-  $('pay').scrollIntoView({ behavior: 'smooth' });
+
+  // 1. Automatically launch the customer's UPI app directly
+  const upiUrl = upiUri();
+  try {
+    window.location.href = upiUrl;
+  } catch(_) {}
+
+  // 2. Direct user smoothly to the screenshot attachment section for when they return
   setTimeout(() => {
-    payWithCashfree();
+    const target = $('shotSection') || $('pay');
+    target.scrollIntoView({ behavior: 'smooth' });
+    shotSay('⚡ Opening UPI app for ₹' + t + '... After paying, attach your screenshot below to confirm.');
   }, 400);
 });
 // ===== Payment screenshot check (runs in the buyer's browser) =====
@@ -897,7 +835,7 @@ function verifyShot(text,amt){
   const nums=[...t.matchAll(/\d+(?:\.\d{1,2})?/g)].map(m=>m[0]);
   const whole=n=>n.replace(/\.0{1,2}$/,'');
   const exact=nums.some(n=>parseFloat(n)===A&&!/^0\d/.test(n));
-  const recipientOk=/9239049437|9239048437|fam|bhargab|modak|midnight/i.test(t);
+  const recipientOk=/paban|modak|pabanmodak|1972|oksbi/i.test(t);
   // The rupee sign is often read as extra characters/digits ("₹65" -> "265", "765", "%65").
   // A token that ends with the exact amount can only mean the same or a larger payment, so it is accepted when the payee also matches.
   const prefixed=nums.some(n=>{const w=whole(n);return w.length>As.length&&w.length<=As.length+2&&w.endsWith(As);});
@@ -1493,4 +1431,3 @@ refresh();
 </script>
 </body>
 </html>
-
