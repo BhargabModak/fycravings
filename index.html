@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Midnight Cravings – Late Night Food Delivery</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -300,8 +301,9 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
         <ol class="steps">
           <li>Pick your food and quantity.</li>
           <li>Enter your name, room and phone.</li>
-          <li>Tap <b>Place order</b>, then pay with UPI below.</li>
-          <li>Tap <b>I've paid</b> and wait at the hostel gate.</li>
+          <li>Tap <b>Place order</b>.</li>
+          <li>Tap <b>Pay Now</b> and complete payment in your UPI app.</li>
+          <li>Wait at the hostel gate once payment is confirmed.</li>
         </ol>
         <p class="note">Kitchen closes at 11:00 PM. Weekend orders &amp; enquiries</p>
         <a class="phone" href="tel:+919239048437">📞 9239048437</a>
@@ -346,8 +348,8 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
 
 <section id="pay">
   <div class="wrap">
-    <h2>Pay with UPI</h2>
-    <p class="lead">Copy the UPI ID, pay in your UPI app, then attach your screenshot below.</p>
+    <h2>Complete Payment</h2>
+    <p class="lead">Tap Pay Now to pay securely via Razorpay. GPay, PhonePe, Paytm and all UPI apps are supported.</p>
     <div class="pay-grid">
       <div class="card">
         <label class="field"><span>Amount (₹)</span>
@@ -357,15 +359,15 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
           <input id="who" type="text" maxlength="40" placeholder="e.g. Riya – Room 214" autocomplete="name"></label>
 
         <div style="display:flex;gap:10px;flex-direction:column;margin:14px 0 8px">
-          <button type="button" class="btn primary full" id="copyUpiBtn" style="font-size:1.05rem;padding:14px">📋 Copy UPI ID</button>
+          <button type="button" class="btn primary full" id="rzpBtn" style="font-size:1.05rem;padding:14px" disabled>⚡ Pay Now</button>
         </div>
 
         <p class="payee">Pay <b id="payAmt"></b> to <b id="payeeName"></b><br>UPI ID: <b id="payeeId"></b></p>
         <ol class="steps">
-          <li>Tap <b>Copy UPI ID</b> above.</li>
-          <li>Open your UPI app (GPay, PhonePe, Paytm), paste the UPI ID and pay the amount.</li>
-          <li>Take a screenshot of the payment.</li>
-          <li>Come back here and upload the screenshot below to verify and confirm your order.</li>
+          <li>Your UPI app (GPay, PhonePe, Paytm) opens with the amount and UPI ID pre-filled.</li>
+          <li>Complete the payment and take a screenshot.</li>
+          <li>Switch back here and upload the screenshot below to verify and confirm your order.</li>
+          <li>(If your app didn't open automatically, tap <b>Open UPI App &amp; Pay</b> above or use <b>Copy UPI ID</b>).</li>
         </ol>
 
         <div id="shotSection" style="padding-top:12px;border-top:1px solid rgba(255,255,255,.12);margin-top:12px">
@@ -466,7 +468,7 @@ button.btn{font:inherit;font-weight:700;cursor:pointer}
 document.getElementById('bg').style.backgroundImage = 'url(' + document.getElementById('bgsrc').src + ')';
 
 // ===== UPI payment =====
-const UPI = { pa: "9329048437@fam", pn: "Bhargab Modak", note: "Midnight Cravings" };
+const UPI = { pa: "9239048437@fam", pn: "Bhargab Modak", note: "Midnight Cravings" };
 const $ = id => document.getElementById(id);
 const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/i.test(navigator.platform));
@@ -505,7 +507,7 @@ $('amt').addEventListener('input', refresh);
 $('who').addEventListener('input', refresh);
 document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => { $('amt').value = c.dataset.amt; refresh(); }));
 
-$('copyUpiBtn').addEventListener('click', () => {
+const _cub=$('copyUpiBtn');_cub && _cub.addEventListener('click', () => {
   const ok = copyIdSync();
   say(ok ? 'UPI ID copied: ' + UPI.pa + '. Now open your UPI app and pay to it.' : 'Copy failed. Type this UPI ID in your UPI app: ' + UPI.pa);
 });
@@ -676,47 +678,9 @@ function applyHours(){
   else{if($('orderStatus').textContent===CLOSED_MSG)osay('');renderStock();}   // reopen: stock rules decide which dishes are enabled
 }
 
-// ===== Telegram Order Notifications =====
-const TG_CONFIG = {
-  token: "8833052852:AAGqSsghZLTRs0dF5JXL5nXTzpBkQJelp2s",
-  chatId: "7174358687"
-};
+// Telegram handled by Cloudflare Worker.
+function notifyOwnerTelegram() {}
 
-function tgEscape(str) {
-  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-function notifyOwnerTelegram(order) {
-  try {
-    const itemsList = (order.items || []).map(x => '• ' + tgEscape(x.n) + ' <b>x' + x.q + '</b> (₹' + (x.p * x.q) + ')').join('\n');
-    const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
-    const text = 
-'✅ <b>PAYMENT CONFIRMED - NEW ORDER!</b>\n' +
-'━━━━━━━━━━━━━━━━━━━━\n' +
-'👤 <b>Customer:</b> ' + tgEscape(order.name) + '\n' +
-'🚪 <b>Room / Hostel:</b> ' + tgEscape(order.room) + '\n' +
-'📞 <b>Phone:</b> <a href="tel:' + tgEscape(order.phone) + '">' + tgEscape(order.phone) + '</a>\n' +
-'💰 <b>Total Paid:</b> ₹' + order.total + '\n' +
-(order.utr ? ('💳 <b>UTR / Txn ID:</b> ' + tgEscape(order.utr) + '\n') : '💳 <b>UTR:</b> Uploaded via Screenshot\n') +
-'━━━━━━━━━━━━━━━━━━━━\n' +
-'🍽️ <b>Items to Cook:</b>\n' +
-itemsList + '\n' +
-'━━━━━━━━━━━━━━━━━━━━\n' +
-'⏰ <b>Time:</b> ' + timeStr + '\n' +
-'📍 <b>Status:</b> Payment verified & confirmed';
-
-    fetch('https://api.telegram.org/bot' + TG_CONFIG.token + '/sendMessage', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: TG_CONFIG.chatId,
-        text: text,
-        parse_mode: 'HTML'
-      }),
-      keepalive: true
-    }).catch(() => {});
-  } catch (_) {}
-}
 
 $('placeBtn').addEventListener('click',async()=>{
   if(isClosedNow()){applyHours();return;}
@@ -740,15 +704,11 @@ $('placeBtn').addEventListener('click',async()=>{
   placing=false;orderId=id;orderAmt=t;orderTs=ts;orderItems=L;resetShot();$('shot').value='';
   $('amt').value=t;$('who').value=name+' – '+room;refresh();
   copyIdSync();
-  osay(ok?'Order saved! UPI ID copied. Pay ₹'+t+' in your UPI app, then attach the screenshot below.':'Could not save online. Pay below and call 9239048437 with your order.');
+  osay(ok ? 'Order saved! Tap Pay Now below to complete payment.' : 'Could not save online. Tap Pay Now to try again or call 9239048437.');
   saveState();
-
-  // Scroll to the payment section (no automatic redirect to a UPI app)
-  setTimeout(() => {
-    const target = $('shotSection') || $('pay');
-    target.scrollIntoView({ behavior: 'smooth' });
-    shotSay('Pay ₹' + t + ' to the copied UPI ID, then attach your screenshot here to confirm.');
-  }, 400);
+  const rzpBtn = $('rzpBtn');
+  if (rzpBtn) { rzpBtn.disabled = false; rzpBtn.textContent = '⚡ Pay ₹' + t; }
+  setTimeout(() => { const target = $('pay'); if (target) target.scrollIntoView({ behavior: 'smooth' }); }, 400);
 });
 // ===== Payment screenshot check (runs in the buyer's browser) =====
 let shotData=null,shotInfo=null,shotToken=0,tessLoading=null;
@@ -824,8 +784,7 @@ function verifyShot(text,amt){
   const nums=[...t.matchAll(/\d+(?:\.\d{1,2})?/g)].map(m=>m[0]);
   const whole=n=>n.replace(/\.0{1,2}$/,'');
   const exact=nums.some(n=>parseFloat(n)===A&&!/^0\d/.test(n));
-  const _payeeWords=[...UPI.pn.split(/\s+/),UPI.pa.split('@')[0],UPI.pa.split('@')[1],(UPI.pa.match(/\d{3,}/)||[])[0]].filter(w=>w&&w.length>2).map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
-  const recipientOk=new RegExp(_payeeWords.join('|'),'i').test(t);
+  const recipientOk=/paban|modak|pabanmodak|1972|oksbi/i.test(t);
   // The rupee sign is often read as extra characters/digits ("₹65" -> "265", "765", "%65").
   // A token that ends with the exact amount can only mean the same or a larger payment, so it is accepted when the payee also matches.
   const prefixed=nums.some(n=>{const w=whole(n);return w.length>As.length&&w.length<=As.length+2&&w.endsWith(As);});
@@ -1083,7 +1042,8 @@ function restoreState(){
       const b=$('paidBtn');b.dataset.done='1';b.textContent='Paid ✓';b.disabled=true;$('oUtr').disabled=true;$('callBox').hidden=false;
       shotSay('✓ Payment recorded as Paid.');
     }else{
-      osay('Welcome back! Your order of ₹'+orderAmt+' is still here. Pay, upload the screenshot, then tap "I\'ve paid".');
+      const rzpBtnR=$('rzpBtn');if(rzpBtnR){rzpBtnR.disabled=false;rzpBtnR.textContent='⚡ Pay ₹'+orderAmt;}
+      osay('Welcome back! Your order of ₹'+orderAmt+' is still here. Tap Pay Now to complete payment.');
     }
   }
   refresh();
@@ -1418,6 +1378,67 @@ applyHours();setInterval(applyHours,30000);
 setInterval(renderStock,60000);
 getDb();
 refresh();
+</script>
+
+<script>
+// ===== Razorpay Checkout =====
+const WORKER_URL = 'https://fycravingspay.bhargabmodak2007.workers.dev';
+(function() {
+  const btn = $('rzpBtn');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    if (btn.disabled) return;
+    btn.disabled = true; btn.textContent = '⏳ Opening payment…';
+    try {
+      const res = await fetch(WORKER_URL + '/create-order', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ firestoreDocId: orderId, items: (orderItems||lines()).map(x=>({id:x.id,q:x.q})) }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.rzp_order_id) throw new Error(data.error || 'Could not create order');
+      if (typeof Razorpay === 'undefined') throw new Error('Payment SDK not loaded. Check your internet connection and reload the page.');
+      const rzp = new Razorpay({
+        key: data.key_id, amount: data.amount * 100, currency: 'INR',
+        name: 'Midnight Cravings', description: 'Hostel food delivery',
+        order_id: data.rzp_order_id,
+        prefill: { name: $('oName').value.trim(), contact: $('oPhone').value.trim() },
+        theme: { color: '#ffb43a' },
+        handler: async function(response) {
+          btn.disabled = true; btn.textContent = '⏳ Verifying…';
+          try {
+            const vRes = await fetch(WORKER_URL + '/verify-payment', {
+              method: 'POST', headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                razorpay_order_id:   response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature:  response.razorpay_signature,
+                firestoreDocId: orderId, amount: orderAmt || total(),
+              }),
+            });
+            const vData = await vRes.json();
+            if (!vRes.ok || !vData.paid) throw new Error(vData.error || 'Verification failed');
+            btn.textContent = '✓ Paid'; btn.style.background = '#1e9e5a';
+            osay('✅ Payment confirmed! Order ' + orderId + ' is placed. Wait at the hostel gate.');
+            $('callBox') && ($('callBox').hidden = false);
+            if (db) { try { await db.collection('orders').doc(orderId).update({ rzp_paid: true, rzp_payment_id: response.razorpay_payment_id }); } catch(_) {} }
+          } catch(e) {
+            btn.disabled = false; btn.textContent = '⚡ Pay ₹' + (orderAmt||total());
+            osay('Payment received but verification failed. Call 9239048437 and quote ' + response.razorpay_payment_id);
+          }
+        },
+        modal: { ondismiss: function() { btn.disabled=false; btn.textContent='⚡ Pay ₹'+(orderAmt||total()); osay('Payment cancelled. Tap Pay Now to try again.'); } },
+      });
+      rzp.on('payment.failed', function(resp) {
+        btn.disabled=false; btn.textContent='⚡ Pay ₹'+(orderAmt||total());
+        osay('Payment failed: '+((resp.error&&resp.error.description)||'Unknown error')+'. Please try again.');
+      });
+      rzp.open();
+    } catch(e) {
+      btn.disabled=false; btn.textContent='⚡ Pay ₹'+(orderAmt||total());
+      osay('Could not open payment: '+e.message);
+    }
+  });
+})();
 </script>
 </body>
 </html>
